@@ -65,23 +65,41 @@
       shape:{ kind:'circle', r:16 }, rest:0.85, head:'dos', params:{ pts:10, angle:16 } },
     { id:'bekam', name:'Bekam', rarity:'especial', family:'manipulador', price:7,
       shape:{ kind:'circle', r:16 }, rest:0.85, head:'vincha', params:{ pts:20, curveTime:0.6, turn:2.6 } },
-    { id:'cazagoles', name:'El Cazagoles', rarity:'especial', family:'multiplicador', price:5,
-      shape:{ kind:'circle', r:16 }, rest:0.85, head:'mono', params:{ mult:5 } },
+    { id:'cazagoles', name:'El Cazagoles', rarity:'especial', family:'multiplicador', price:7,
+      shape:{ kind:'circle', r:16 }, rest:0.85, head:'mono', params:{ mult:4 } },
 
     // ---------------- LEGENDARIO (solo jefes) ----------------
     { id:'mano', name:'La Mano', rarity:'legendario', family:'condicional', price:0, shop:false,
       shape:{ kind:'circle', r:17 }, rest:0.85, head:'guante', params:{ xmult:2 } },
     { id:'diez', name:'El Diez', rarity:'legendario', family:'escalador', price:0, shop:false,
       shape:{ kind:'circle', r:17 }, rest:0.85, head:'rizos', params:{ growth:1 } },
+    { id:'cacique', name:'El Cacique', rarity:'legendario', family:'condicional', price:0, shop:false,
+      shape:{ kind:'circle', r:17 }, rest:0.85, head:'penacho', params:{ shots:1 } },
   ];
 
-  /* Cosas del mostrador de Don Chucho: consumibles de un solo uso (van al bolsillo). */
+  /* ===================== MOSTRADOR DE DON CHUCHO =====================
+     Cosas sueltas que se compran en la tienda. Campos:
+       when   'shot'  se guarda en el bolsillo y vale para el PRÓXIMO TIRO
+              'match' se guarda en el bolsillo y vale para TODO EL PARTIDO
+              'run'   se aplica al comprarlo y dura TODO EL PICADITO
+       once   true = solo se puede comprar una vez por picadito
+       weight peso para el sorteo del mostrador (se edita en el debug)
+     Agregar uno = entrada aquí + su caso en useItem/buyItem (js/game.js) + textos. */
   const ITEMS = [
-    { id:'tiza',     price:4, icon:'✏️', when:'match' },   // +1 tiro en este partido
-    { id:'empanada', price:4, icon:'🥟', when:'shot' },    // +2 Mult base en el próximo tiro
-    { id:'iman',     price:2, icon:'🧲', when:'shot' },    // la guía muestra 2 rebotes en el próximo tiro
-    { id:'pito',     price:3, icon:'📣', when:'shot' },    // el próximo tiro no puede ser autogol
-    { id:'gaseosa',  price:3, icon:'🥤', when:'match' },   // la plata de este partido ×2 al cobrar
+    // ---------- de un tiro ----------
+    { id:'empanada', price:4, weight:10, icon:'🥟', when:'shot' },   // +2 Mult base en el próximo tiro
+    { id:'iman',     price:2, weight:10, icon:'🧲', when:'shot' },   // la guía muestra 2 rebotes
+    { id:'pito',     price:3, weight:10, icon:'📣', when:'shot' },   // el próximo tiro no puede ser autogol
+    { id:'talco',    price:3, weight:10, icon:'🧂', when:'shot' },   // el balón rueda mucho más
+    { id:'polvora',  price:3, weight:10, icon:'🧨', when:'shot' },   // las bandas pagan doble
+    // ---------- de un partido ----------
+    { id:'tiza',     price:4, weight:10, icon:'✏️', when:'match' },  // +1 tiro en este partido
+    { id:'gaseosa',  price:3, weight:10, icon:'🥤', when:'match' },  // la plata de este partido ×2
+    { id:'radio',    price:5, weight:8,  icon:'📻', when:'match' },  // +1 Mult base en todos los tiros del partido
+    // ---------- para todo el picadito ----------
+    { id:'alcancia', price:7, weight:6,  icon:'🐷', when:'run' },    // +2 de plata al terminar cada partido
+    { id:'banquito', price:6, weight:6,  icon:'🪑', when:'run' },    // +1 espacio en la banca
+    { id:'vitrina',  price:6, weight:5,  icon:'🏆', when:'run', once:true },   // +1 cupo de Legendarios
   ];
   const ITEM = {}; for (const it of ITEMS) ITEM[it.id] = it;
 

@@ -45,7 +45,7 @@ const PR = GOLIN.progress;
 const PROFILE = Object.assign(PR.newProfile(), (() => { try { return JSON.parse(localStorage.getItem('golinProfile') || '{}'); } catch (e) { return {}; } })());
 function saveProfile() { try { localStorage.setItem('golinProfile', JSON.stringify(PROFILE)); } catch (e) {} }
 let LM = PR.levelMods(1);                   // reglas de la cancha actual
-Object.assign(G, { metaBase:0, matchStart:0, matchQuota:0, retry:false, level:1, plan:null, mod:null, pocket:[], shopItems:[], matchFlags:{}, nextShot:{}, windDir:1, wonOnLastShot:false });
+Object.assign(G, { metaBase:0, matchStart:0, matchQuota:0, retry:false, level:1, plan:null, mod:null, pocket:[], shopItems:[], matchFlags:{}, nextShot:{}, runFlags:{}, itemsBought:[], legCap:2, caciqueUsed:false, windDir:1, wonOnLastShot:false });
 /* Desbloqueos: se revisan con cada tiro, partido y picadito */
 function progressEvent(ev) {
   const fresh = PR.applyEvent(PROFILE, ev);
@@ -108,7 +108,7 @@ addSensor(GO.x1, GO.x2, T.b + 36, 'own');
 
 function makeDoll(id, paid) {
   const p = dc(id);
-  return { uid: dollUid++, id, paid, value: p.base !== undefined ? p.base : 0, hitT:-9999, nx:0, ny:1, rojas:0, expelledFor:null };
+  return { uid: dollUid++, id, rarity: DOLL[id].rarity, paid, value: p.base !== undefined ? p.base : 0, hitT:-9999, nx:0, ny:1, rojas:0, expelledFor:null };
 }
 /* Estados que cambian qué muñecos actúan: El Árbitro (delantera muda) y la roja de Rambos. */
 function isMuted(slot) { return G.boss === 'arbitro' && slot.rod === 0; }
@@ -317,8 +317,10 @@ function stats(id, n) { G.stats.use[id] = (G.stats.use[id] || 0) + n; }
 const ACTIVATED = {};
 function activated(id) { ACTIVATED[id] = (ACTIVATED[id] || 0) + 1; }
 /* Reglas de la mesa que cambian valores de física o de puntuación */
+const shotItems = () => ((G.state === 'shooting' && shot ? shot.items : G.nextShot) || {});
 function phys(k) {
   let v = CFG.physics[k]; const M = CFG.tableMods;
+  if (k === 'rollFric' && shotItems().talco) v *= CFG.economy.talcoRoll;     // El Talco: el balón se desliza
   if (G.mod === 'encerada') { if (k === 'drag') v *= M.enceradaDrag; if (k === 'rollFric') v *= M.enceradaRoll; }
   if (G.mod === 'goma' && k === 'wallRest') v = Math.max(v, M.gomaRest);
   if (G.mod === 'pesada' && k === 'rollFric') v *= M.pesadaRoll;
@@ -326,6 +328,7 @@ function phys(k) {
 }
 function scoringCfg() {
   let w = CFG.scoring.wallPts;
+  if (shotItems().polvora) w *= CFG.economy.polvoraWallPts;   // La Pólvora: bandas al doble
   if (G.boss === 'tacano') w = 0;                        // El Tacaño: las bandas no pagan
   if (G.mod === 'pesada') w *= CFG.tableMods.pesadaWallPts;
   return w === CFG.scoring.wallPts ? CFG : Object.assign({}, CFG, { scoring: Object.assign({}, CFG.scoring, { wallPts: w }) });
@@ -333,7 +336,7 @@ function scoringCfg() {
 function beginShot() {
   refreshDollStates();
   return SC.newShot({
-    baseMult: SC.baseMultOf(G.slots) + (G.nextShot.empanada ? CFG.economy.empanadaMult : 0),
+    baseMult: SC.baseMultOf(G.slots) + (G.nextShot.empanada ? CFG.economy.empanadaMult : 0) + (G.matchFlags.radio ? CFG.economy.radioMult : 0),
     garra: SC.garraState(G.slots, CFG, G.shotsLeft, G.total, G.quota),
     kante: SC.kanteRescues(G.slots, CFG),
     diez: SC.diezList(G.slots, CFG),
@@ -514,10 +517,11 @@ function useItem(i) {
   const id = G.pocket[i]; if (!id || G.state !== 'aim') return;
   const it = GOLIN.ITEM[id];
   if (it.when === 'shot' && G.nextShot[id]) { SFX.error(); return; }
-  if (id === 'gaseosa' && G.matchFlags.gaseosa) { SFX.error(); return; }
+  if ((id === 'gaseosa' && G.matchFlags.gaseosa) || (id === 'radio' && G.matchFlags.radio)) { SFX.error(); return; }
   G.pocket.splice(i, 1);
   if (id === 'tiza') G.shotsLeft++;
   else if (id === 'gaseosa') G.matchFlags.gaseosa = true;
+  else if (id === 'radio') G.matchFlags.radio = true;
   else G.nextShot[id] = true;
   bigText(t('item.' + id + '.used'), '#f4ead5', 1000, '', { small:true }); SFX.levelup();
   LOG.item(id); updateBoard(); updateShotbar(); renderSide();
@@ -622,6 +626,17 @@ async function scoreShot() {
     bigText(t('fx.quota'), '#FFC93C', 1300);
     await wait(650);
   }
+  if (G.shotsLeft <= 0 && G.total < G.quota && !G.caciqueUsed) {
+    const extra = SC.caciqueShots(G.slots, CFG);          // El Cacique: una vez por partido, un tiro más
+    if (extra > 0) {
+      G.caciqueUsed = true; G.shotsLeft += extra; activated('cacique');
+      const sl = G.slots.find(x => x.doll && x.doll.id === 'cacique' && SC.isActive(x.doll));
+      if (sl) { sl.doll.hitT = now(); rings.push({ x:sl.x, y:sl.y, t:now(), color:'#D4A017' }); }
+      bigText(t('fx.cacique'), '#D4A017', 1500, t('fx.caciqueSub', { n: extra }));
+      SFX.stinger(); addShake(CFG.juice.shake * 4, 0.3);
+      updateBoard();
+    }
+  }
   if (G.shotsLeft <= 0) { await wait(250); return endMatch(G.total >= G.quota); }
   resetBall(); G.state = 'aim'; updateShotbar(); renderSide();
   if (firstShot) coach('bounce');
@@ -643,7 +658,7 @@ const EC = GOLIN.economy;
 function endMatch(win) {
   if (G.state === 'matchend') return;
   G.state = 'matchend'; G.lastWin = win;
-  const rw = EC.matchRewards({ win, shotsLeft: G.shotsLeft, goals: G.goals, gaseosa: !!G.matchFlags.gaseosa }, CFG, LM);
+  const rw = EC.matchRewards({ win, shotsLeft: G.shotsLeft, goals: G.goals, gaseosa: !!G.matchFlags.gaseosa, alcancia: !!G.runFlags.alcancia }, CFG, LM);
   if (win) G.won++; else G.lives--;
   // Marcador acumulado: al ganar, la meta alcanzada es la base del próximo partido y lo que sobra se arrastra.
   // Al perder, el partido se repite desde el marcador con el que empezó.
@@ -665,9 +680,28 @@ function afterLegendary(win) {
   openShop();
 }
 const allDolls = () => G.slots.filter(s => s.doll).map(s => s.doll).concat(G.bench.filter(Boolean));
+const legendaryIds = () => allDolls().filter(d => d.rarity === 'legendario').map(d => d.id);
+/* Dónde está cada Legendario (para poder soltar uno cuando el cupo está lleno) */
+function legendarySpots() {
+  const out = [];
+  G.slots.forEach(s => { if (s.doll && s.doll.rarity === 'legendario') out.push({ where:'slot', slot:s, doll:s.doll }); });
+  G.bench.forEach((d, i) => { if (d && d.rarity === 'legendario') out.push({ where:'bench', i, doll:d }); });
+  return out;
+}
+/* Suelta un Legendario para hacerle espacio al nuevo (único modo de perder uno) */
+function swapLegendary(spot, inst) {
+  if (spot.where === 'bench') { G.bench[spot.i] = inst; }
+  else {
+    spot.slot.doll = null;
+    const free = G.bench.indexOf(null);
+    if (free >= 0) G.bench[free] = inst; else spot.slot.doll = inst;
+    rebuildDolls();
+  }
+  SFX.place(); renderSide();
+}
 /* Legendario al vencer a un jefe: a la banca; si está llena, el jugador elige qué descartar; si ya lo tiene, plata. */
 function grantLegendary(id, done) {
-  const out = EC.legendaryOutcome(id, allDolls().map(d => d.id), G.bench);
+  const out = EC.legendaryOutcome(id, legendaryIds(), G.bench, G.legCap);
   const inst = makeDoll(id, 0);
   if (out === 'dup') { G.plata += CFG.economy.legendaryDupPlata; updateBoard(); SFX.caja(4); }
   else if (out === 'bench') G.bench[G.bench.indexOf(null)] = inst;
@@ -678,7 +712,7 @@ function openShop() {
   $('board').classList.remove('victory');
   endDrag();
   G.offers = EC.rollShop(G.match, CFG, PR.shopPool(GOLIN.ROSTER, PROFILE));
-  G.shopItems = EC.rollItems(CFG, GOLIN.ITEMS);
+  G.shopItems = EC.rollItems(CFG, GOLIN.ITEMS, Math.random, itemState());
   MUSIC.setMode('shop'); MUSIC.setIntensity(0);
   coach('shop');
   resetBall(); renderSide(); updateShotbar(); updateBoard();
@@ -705,7 +739,7 @@ function startMatch() {
   G.matchQuota = EC.quotaFor(G.match, CFG, LM);
   G.quota = G.metaBase + G.matchQuota;              // meta acumulada del picadito
   G.shotsLeft = shotsPerMatch(); G.goals = 0;
-  G.matchFlags = {}; G.nextShot = {}; G.wonOnLastShot = false; G.windDir = Math.random() < 0.5 ? -1 : 1;
+  G.matchFlags = {}; G.nextShot = {}; G.caciqueUsed = false; G.wonOnLastShot = false; G.windDir = Math.random() < 0.5 ? -1 : 1;
   LOG.startMatch({ match: G.match, boss: G.boss, mod: G.mod, quota: G.matchQuota, meta: G.quota, carry: G.total - G.metaBase, shotsAllowed: G.shotsLeft,
     table: G.slots.filter(s => s.doll).map(s => s.doll.id), plata: G.plata });
   G.sellMode = false; G.selectedOffer = null; shot = null;
@@ -730,6 +764,7 @@ function resetRun(level) {
   if (level) { PROFILE.lastLevel = Math.min(level, PROFILE.maxLevel); saveProfile(); }
   G.level = PROFILE.lastLevel || 1; LM = PR.levelMods(G.level);
   G.plan = EC.planRun(CFG); G.pocket = []; G.hasShotRun = false;
+  G.runFlags = {}; G.itemsBought = []; G.legCap = CFG.economy.legendaryCap;
   LOG.startRun({ level: G.level, plan: G.plan });
   for (const s of G.slots) s.doll = null;
   Object.assign(G, { total:0, metaBase:0, matchStart:0, retry:false, match:1, played:0, plata:CFG.economy.startPlata, lives:CFG.economy.lives, won:0, bestShot:0, lastWin:false,
@@ -764,22 +799,33 @@ function buy(idx, target) {
   LOG.shop({ type:'buy', id, price, to: target.slot ? 'mesa' : 'banca' });
   updateBoard(); renderSide();
 }
+const itemState = () => ({ legCap: G.legCap, legCapMax: CFG.economy.legendaryCapMax, benchSize: G.bench.length, benchMax: CFG.economy.benchMax, bought: G.itemsBought });
 function buyItem(i) {
   const id = G.shopItems[i]; if (!id) return;
-  const price = EC.itemPrice(id, CFG, LM);
-  if (G.pocket.length >= CFG.economy.pocketSize) { SFX.error(); shopToast(t('shop.pocketFull')); return; }
+  const price = EC.itemPrice(id, CFG, LM), when = GOLIN.ITEM[id].when;
+  if (when !== 'run' && G.pocket.length >= CFG.economy.pocketSize) { SFX.error(); shopToast(t('shop.pocketFull')); return; }
   if (G.plata < price) { noPlata(null); return; }
-  G.plata -= price; G.pocket.push(id); G.shopItems[i] = null;
-  SFX.caja(2); LOG.shop({ type:'item', id, price });
+  G.plata -= price; G.shopItems[i] = null; G.itemsBought.push(id);
+  if (when === 'run') applyRunItem(id); else G.pocket.push(id);
+  SFX.caja(2); LOG.shop({ type:'item', id, price, when });
   updateBoard(); renderSide();
+}
+/* Cosas que duran todo el picadito: se aplican al comprarlas */
+function applyRunItem(id) {
+  if (id === 'vitrina') G.legCap = Math.min(CFG.economy.legendaryCapMax, G.legCap + 1);
+  else if (id === 'banquito') { if (G.bench.length < CFG.economy.benchMax) G.bench.push(null); }
+  else if (id === 'alcancia') G.runFlags.alcancia = true;
+  shopToast(t('item.' + id + '.used'));
 }
 function buyToBench(idx) {
   const free = G.bench.indexOf(null);
   if (free < 0) { SFX.error(); shopToast(t('shop.benchFull')); return; }
   buy(idx, { bench: free });
 }
+const noSell = () => { SFX.error(); shopToast(t('shop.noSell')); };
 function sellSlot(slot) {
   const d = slot.doll; if (!d) return;
+  if (!EC.canSell(d)) return noSell();
   const back = EC.sellValue(d);
   G.plata += back; LOG.shop({ type:'sell', id: slot.doll.id, back }); slot.doll = null; rebuildDolls();
   SFX.caja(1); popText('+' + back, slot.x, slot.y - 20, 16, '#FFC93C', 'plata');
@@ -787,9 +833,10 @@ function sellSlot(slot) {
 }
 function sellBench(i) {
   const d = G.bench[i]; if (!d) return;
+  if (!EC.canSell(d)) return noSell();
   G.plata += EC.sellValue(d); G.bench[i] = null; SFX.caja(1); updateBoard(); renderSide();
 }
-function discardBench(i) { if (!G.bench[i]) return; G.bench[i] = null; SFX.sell(); renderSide(); }
+function discardBench(i) { if (!G.bench[i]) return; if (!EC.canSell(G.bench[i])) return noSell(); G.bench[i] = null; SFX.sell(); renderSide(); }
 function placeDoll(inst, slot) { slot.doll = inst; inst.hitT = now(); inst.nx = 0; inst.ny = 1; }
 /* Soltar lo arrastrado sobre un destino: hueco de la mesa o hueco de la banca. Si está ocupado, intercambian. */
 function dropOn(src, dst) {
@@ -1080,7 +1127,10 @@ function drawDoll(s, tm) {
   if (d.id === 'diez') drawMultStamp(ctx, '+' + d.value, s.x, s.y - 30, 10);
   if (d.id === 'rambos' && d.rojas > 0) for (let i = 0; i < d.rojas; i++) drawCard(ctx, s.x - 8 + i * 8, s.y - 28, 10, PAL.amarillo, 0.15);
   if (d.id === 'mano' && G.manoUsed) { ctx.fillStyle = 'rgba(26,20,35,0.5)'; circle(ctx, s.x, s.y, 18); ctx.fill(); }
-  if (G.state === 'shop' && G.sellMode) drawPlataChip(ctx, '+' + EC.sellValue(d), s.x, s.y + 30, 10);
+  if (G.state === 'shop' && G.sellMode) {
+    if (EC.canSell(d)) drawPlataChip(ctx, '+' + EC.sellValue(d), s.x, s.y + 30, 10);
+    else { ctx.font = `10px ${FONT_NUM}`; plateText(ctx, '🔒', s.x, s.y + 30, 10, PAL.crema); }
+  }
 }
 function drawLlaveLinks(tm) {
   for (const s of G.slots) {

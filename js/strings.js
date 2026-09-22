@@ -63,6 +63,8 @@
     'doll.mano.joke': 'El árbitro no vio nada. Nadie vio nada.',
     'doll.diez.rule': 'Cada gol suma +{growth} al Mult base para siempre. Va en +{value}.',
     'doll.diez.joke': 'El barrio entero se para cuando la toca.',
+    'doll.cacique.rule': 'Una vez por partido, si ibas a perder una vida:\nte regala {shots} tiro más para alcanzar la meta.',
+    'doll.cacique.joke': 'Aquí manda él, y él dice que todavía no.',
 
     // ---------- marcador ----------
     'board.match': 'PARTIDO', 'board.round': 'RONDA {r}/{n}', 'board.quota': 'MARCADOR / META',
@@ -73,7 +75,7 @@
     'chip.chilena': '{n}/{needed} distintas', 'chip.chilenaTouch': '(tócala)',
     'chip.fantasma': '{t} s', 'chip.fantasmaTouch': '(tócalo)',
     'chip.tendero': '+{n} de plata', 'chip.goal': '¡GOL!', 'chip.garra': 'GARRA: +{pct}% pts',
-    'chip.arbitro': 'Delantera sin efectos', 'chip.base': 'Mult base ×{m}', 'chip.left': 'Faltan {n}', 'chip.over': '¡Meta! Llevas +{n} para el próximo',
+    'chip.arbitro': 'Delantera sin efectos', 'chip.base': 'Mult base ×{m}', 'chip.cacique': 'El Cacique: un tiro más si fallas', 'chip.left': 'Faltan {n}', 'chip.over': '¡Meta! Llevas +{n} para el próximo',
     'board.matchQuota': 'este partido +{q}', 'fx.carry': 'Traes +{n} del partido anterior',
     'skip': 'Saltar tiros (+{n} de plata)',
 
@@ -87,6 +89,7 @@
     'fx.gemelo': '¡GEMELO!', 'fx.comba': '¡COMBA!', 'fx.mano': '¡LA MANO!', 'fx.roja': '¡ROJA!',
     'fx.tendero': '¡TENDERO!', 'fx.quota': '¡CUOTA!', 'fx.pirlito': 'TOQUE FINO', 'fx.miss': 'Ese tiro pidió permiso.',
     'fx.levelUp': '+{n}', 'fx.signed': '¡Fichado!', 'fx.noPlata': 'Sin plata no hay muñeco. Aquí no se fía.',
+    'fx.cacique': '¡EL CACIQUE TE SALVA!', 'fx.caciqueSub': 'Te regala {n} tiro más',
     'fx.match': 'PARTIDO {n}', 'fx.quotaSub': 'Meta {q} · faltan {f}', 'fx.expelled': 'EXPULSADO',
 
     // ---------- conteo del tiro ----------
@@ -112,6 +115,8 @@
     'legend.title': '¡Ganaste un legendario!', 'legend.toBench': 'Va directo a tu banca.',
     'legend.dup': 'Ya lo tienes: +{n} de plata.', 'legend.full': 'La banca está llena. ¿Qué descartas?',
     'legend.discard': 'Descartar', 'legend.ok': 'Seguir ▶',
+    'legend.capfull': 'Solo caben {n} Legendarios. ¿A cuál le das las gracias?',
+    'legend.swap': 'Soltarlo y quedarme con el nuevo', 'legend.reject': 'Dejar el nuevo. Me quedo con los míos.',
 
     // ---------- tienda ----------
     'shop.title': 'TIENDA DE DON CHUCHO',
@@ -151,11 +156,20 @@
     // ---------- mostrador de Don Chucho (consumibles) ----------
     'shop.counter': 'MOSTRADOR', 'shop.pocket': 'Bolsillo', 'shop.pocketFull': 'El bolsillo está lleno. Úsalo en la mesa.',
     'shop.new': '¡NUEVO!',
+    'shop.noSell': 'Este no se suelta. Los Legendarios se quedan.', 'shop.noSellShort': '🔒 No se suelta',
+    'shop.legCap': 'Legendarios: {n} de {m}',
     'item.tiza.name': 'Tiza', 'item.tiza.rule': '+1 tiro en este partido.', 'item.tiza.used': '+1 TIRO',
     'item.empanada.name': 'Empanada', 'item.empanada.rule': '+2 Mult base en tu próximo tiro.', 'item.empanada.used': '¡EMPANADA! +2 MULT',
     'item.iman.name': 'Imán', 'item.iman.rule': 'La guía muestra dos rebotes en tu próximo tiro.', 'item.iman.used': 'IMÁN: 2 REBOTES',
     'item.pito.name': 'Pito', 'item.pito.rule': 'Tu próximo tiro no puede ser autogol.', 'item.pito.used': 'ARCO CERRADO',
     'item.gaseosa.name': 'Gaseosa', 'item.gaseosa.rule': 'La plata de este partido sale doble.', 'item.gaseosa.used': '¡GASEOSA! PLATA ×2',
+    'item.talco.name': 'Talco', 'item.talco.rule': 'Tu próximo tiro rueda mucho más lejos.', 'item.talco.used': 'TALCO: EL BALÓN SE DESLIZA',
+    'item.polvora.name': 'Pólvora', 'item.polvora.rule': 'En tu próximo tiro, las bandas pagan doble.', 'item.polvora.used': '¡PÓLVORA! BANDAS ×2',
+    'item.radio.name': 'La Radio', 'item.radio.rule': '+1 al Mult base en todos los tiros del partido.', 'item.radio.used': 'RADIO PRENDIDA: +1 MULT',
+    'item.alcancia.name': 'La Alcancía', 'item.alcancia.rule': 'Todo el picadito: +2 de plata al terminar cada partido.', 'item.alcancia.used': 'ALCANCÍA: +2 POR PARTIDO',
+    'item.banquito.name': 'El Banquito', 'item.banquito.rule': 'Todo el picadito: un espacio más en la banca.', 'item.banquito.used': 'UN PUESTO MÁS EN LA BANCA',
+    'item.vitrina.name': 'La Vitrina Grande', 'item.vitrina.rule': 'Todo el picadito: cabe un Legendario más. Se compra una sola vez.', 'item.vitrina.used': 'VITRINA GRANDE: CUPO +1',
+    'item.when.shot': 'un tiro', 'item.when.match': 'un partido', 'item.when.run': 'todo el picadito',
 
     // ---------- progreso: desbloqueos y canchas ----------
     'unlock.title': '¡NUEVO MUÑECO!',

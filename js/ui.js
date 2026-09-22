@@ -79,6 +79,7 @@ function aimChips() {
   if (G.boss === 'arbitro') h += `<span class="chip small ko">🟨 ${t('chip.arbitro')}</span>`;
   h = (G.total < G.quota ? `<span class="chip small left">${t('chip.left', { n: fmt(G.quota - G.total) })}</span>`
     : `<span class="chip small ok">${t('chip.over', { n: fmt(G.total - G.quota) })}</span>`) + h;
+  if (!G.caciqueUsed && SC.caciqueShots(G.slots, CFG) > 0) h += `<span class="chip small ok">🪶 ${t('chip.cacique')}</span>`;
   if (G.boss === 'niebla') h += `<span class="chip small ko">🌫 ${t('boss.niebla.name')}</span>`;
   if (G.boss === 'tacano') h += `<span class="chip small ko">${t('boss.tacano.name')}</span>`;
   if (G.mod) h += `<span class="chip small">${t('mod.' + G.mod + '.name')}</span>`;
@@ -194,6 +195,18 @@ function showLegendary(id, outcome, inst, done) {
   const tx = dollText(id, inst);
   const head = `<h1 class="legend">${t('legend.title')}</h1>
     <div class="legendCard"><img src="${dollIcon(id, 128)}"><div><b class="dname">${DOLL[id].name}</b><p>${tx.rule}</p><p class="joke">${tx.joke}</p></div></div>`;
+  if (outcome === 'capfull') {
+    const spots = legendarySpots();
+    panel(head + `<p class="hint">${t('legend.capfull', { n: G.legCap })}</p><div class="discardList">
+      ${spots.map((sp, k) => `<button class="btn discard" data-k="${k}"><img class="mini" src="${dollIcon(sp.doll.id, 48)}"> ${DOLL[sp.doll.id].name} — ${t('legend.swap')}</button>`).join('')}
+      <button class="btn discard" data-k="-1">${t('legend.reject')}</button></div>`);
+    document.querySelectorAll('.discard').forEach(b => b.onclick = () => {
+      const k = +b.dataset.k;
+      if (k >= 0) swapLegendary(spots[k], inst);
+      hidePanel(); renderSide(); done();
+    });
+    return;
+  }
   if (outcome !== 'choose') {
     panel(head + `<p class="hint">${outcome === 'dup' ? t('legend.dup', { n: CFG.economy.legendaryDupPlata }) : t('legend.toBench')}</p>
       <button class="btn primary" id="pOk">${t('legend.ok')}</button>`);
@@ -373,7 +386,7 @@ function benchHTML() {
   return `<h3>${t('shop.bench')}</h3><div class="bench">${G.bench.map((d, i) => d ? `
     <div class="bslot full ${rarityClass(d.id)}" data-b="${i}" title="${DOLL[d.id].name}">
       <img src="${dollIcon(d.id, 72)}" data-b="${i}" draggable="false"><span class="bname">${DOLL[d.id].name}</span>
-      ${G.state === 'shop' ? `<span class="bacts"><button class="mini-btn sell" data-b="${i}">${t('shop.sellFor', { n: EC.sellValue(d) })}</button><button class="mini-btn disc" data-b="${i}">${t('shop.discard')}</button></span>` : ''}
+      ${G.state === 'shop' && EC.canSell(d) ? `<span class="bacts"><button class="mini-btn sell" data-b="${i}">${t('shop.sellFor', { n: EC.sellValue(d) })}</button><button class="mini-btn disc" data-b="${i}">${t('shop.discard')}</button></span>` : G.state === 'shop' ? `<span class="bacts locked">${t('shop.noSellShort')}</span>` : ''}
     </div>` : `<div class="bslot" data-b="${i}"><span class="bname">${t('shop.benchEmpty')}</span></div>`).join('')}</div>`;
 }
 function bindBench() {
@@ -396,8 +409,9 @@ function cardHTML(o, i) {
 function itemsHTML() {
   if (!G.shopItems.length) return '';
   return `<h3>${t('shop.counter')}</h3><div class="counter">${G.shopItems.map((id, i) => id ? `
-    <button class="item ${G.plata < EC.itemPrice(id, CFG, LM) ? 'cant' : ''}" data-it="${i}">
+    <button class="item ${G.plata < EC.itemPrice(id, CFG, LM) ? 'cant' : ''} w-${GOLIN.ITEM[id].when}" data-it="${i}">
       <span class="iicon">${GOLIN.ITEM[id].icon}</span><span class="iname">${t('item.' + id + '.name')}</span>
+      <span class="iwhen">${t('item.when.' + GOLIN.ITEM[id].when)}</span>
       <span class="irule">${t('item.' + id + '.rule')}</span><span class="iprice">$${EC.itemPrice(id, CFG, LM)}</span></button>` :
     `<div class="item sold">${t('shop.sold')}</div>`).join('')}</div>
     <div class="pocketRow">${t('shop.pocket')}: ${G.pocket.length ? G.pocket.map(id => GOLIN.ITEM[id].icon + ' ' + t('item.' + id + '.name')).join(' · ') : t('shop.benchEmpty')} (${G.pocket.length}/${CFG.economy.pocketSize})</div>`;
@@ -416,6 +430,7 @@ function renderSide() {
     side.innerHTML = `<div class="sign"><span>${t('shop.title')}</span></div>
       <p class="tendero">${t('shop.welcome')}</p>
       <div class="plataBig"><span class="coin">$</span> <span class="num">${G.plata}</span></div>
+      <p class="hint">${t('shop.legCap', { n: legendaryIds().length, m: G.legCap })}</p>
       <div id="shopToast" class="toast"></div>
       <div class="vitrina">${G.offers.map(cardHTML).join('')}</div>
       <div class="btns">
@@ -477,7 +492,7 @@ function showTooltip(slot, cx, cy) {
     <div>${tx.rule}</div><div class="joke">${tx.joke}</div>
     ${pw > 1 ? `<div class="key">🔑 ×${pw}</div>` : ''}
     ${d.expelled ? `<div class="red">🟥 ${t('fx.expelled')}</div>` : ''}
-    ${G.state === 'shop' ? `<div class="plataTxt">${t('shop.sellFor', { n: EC.sellValue(d) })}</div>` : ''}`;
+    ${G.state === 'shop' ? `<div class="plataTxt">${EC.canSell(d) ? t('shop.sellFor', { n: EC.sellValue(d) }) : t('shop.noSellShort')}</div>` : ''}`;
   tt.classList.remove('hidden');
   tt.style.left = (cx + 16) + 'px'; tt.style.top = (cy + 12) + 'px';
 }

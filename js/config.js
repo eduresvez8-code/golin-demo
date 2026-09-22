@@ -53,6 +53,13 @@
         shopSize: 3,
         benchSize: 3,
         legendaryDupPlata: 15,
+        legendaryCap: 2,      // Legendarios a la vez (mesa + banca)
+        legendaryCapMax: 3,   // tope al que llega La Vitrina Grande
+        benchMax: 5,          // tope de espacios de banca (El Banquito)
+        radioMult: 1,         // +Mult base de La Radio durante el partido
+        alcanciaPlata: 2,     // plata extra por partido con La Alcancía
+        talcoRoll: 0.45,      // El Talco: fricción de rodadura ×N en ese tiro
+        polvoraWallPts: 2,    // La Pólvora: puntos de banda ×N en ese tiro
         itemsPerShop: 2,      // cosas del mostrador por visita
         pocketSize: 2,        // espacios del bolsillo para consumibles
         empanadaMult: 2,      // +Mult base de la empanada
@@ -85,7 +92,7 @@
     for (const doll of GOLIN.ROSTER) {
       d.dolls[doll.id] = Object.assign({ price: doll.price, rest: doll.rest }, doll.params);
     }
-    for (const it of GOLIN.ITEMS) d.items[it.id] = { price: it.price };
+    for (const it of GOLIN.ITEMS) d.items[it.id] = { price: it.price, weight: it.weight };
     return d;
   }
 

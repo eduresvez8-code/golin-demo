@@ -127,6 +127,17 @@ const HEADS = {
     circle(c, 0, hr * 0.55, hr * 0.5); inkFill(c, PAL.pelo, hr * 0.14); pathRoundRect(c, -hr * 0.5, hr * 0.18, hr, hr * 0.22, hr * 0.1); c.fillStyle = PAL.crema; c.fill(); },
   guante(c, hr) { skull(c, hr); c.beginPath(); c.arc(0, 0, hr, Math.PI, Math.PI * 2); c.closePath(); c.fillStyle = PAL.pelo; c.fill();
     c.save(); c.translate(hr * 1.2, -hr * 0.6); c.rotate(0.5); hand(c, hr * 0.85); c.restore(); },
+  penacho(c, hr) {                       // El Cacique: vincha con plumas
+    for (const s of [-1, 0, 1]) {
+      c.save(); c.translate(s * hr * 0.55, -hr * 0.5); c.rotate(s * 0.45);
+      c.beginPath(); c.moveTo(0, 0); c.quadraticCurveTo(hr * 0.35, -hr * 0.9, 0, -hr * 1.7);
+      c.quadraticCurveTo(-hr * 0.35, -hr * 0.9, 0, 0); c.closePath();
+      inkFill(c, s === 0 ? PAL.crema : PAL.madera, hr * 0.16); c.restore();
+    }
+    skull(c, hr);
+    pathRoundRect(c, -hr * 1.05, -hr * 0.5, hr * 2.1, hr * 0.5, hr * 0.15); inkFill(c, PAL.maderaOsc, hr * 0.16);
+    circle(c, 0, -hr * 0.25, hr * 0.2); inkFill(c, PAL.crema, hr * 0.1);
+  },
   rizos(c, hr) { for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; circle(c, Math.cos(a) * hr * 0.95, Math.sin(a) * hr * 0.95, hr * 0.42); inkFill(c, PAL.pelo, hr * 0.1); }
     circle(c, 0, 0, hr * 0.95); c.fillStyle = PAL.pelo; c.fill();
     for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2 + 0.3; circle(c, Math.cos(a) * hr * 0.45, Math.sin(a) * hr * 0.45, hr * 0.22); c.lineWidth = hr * 0.1; c.strokeStyle = '#4a3a55'; c.stroke(); } },

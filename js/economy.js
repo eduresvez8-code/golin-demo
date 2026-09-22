@@ -54,10 +54,28 @@
   }
   const priceOf = (id, cfg, lm) => cfg.dolls[id].price + ((lm && lm.priceAdd) || 0);
   const itemPrice = (id, cfg, lm) => cfg.items[id].price + ((lm && lm.priceAdd) || 0);
-  /* Mostrador: N consumibles distintos */
-  function rollItems(cfg, items, rng = Math.random) {
-    const pool = items.map(i => i.id), out = [];
-    while (out.length < cfg.economy.itemsPerShop && pool.length) out.push(pool.splice(Math.floor(rng() * pool.length) % pool.length, 1)[0]);
+  /* Qué cosas puede ofrecer el mostrador ahora mismo.
+     state: {legCap, legCapMax, benchSize, benchMax, bought:[ids comprados este picadito]} */
+  function itemPool(cfg, items, state = {}) {
+    const bought = state.bought || [];
+    const legCapMax = state.legCapMax !== undefined ? state.legCapMax : cfg.economy.legendaryCapMax;
+    const benchMax = state.benchMax !== undefined ? state.benchMax : cfg.economy.benchMax;
+    return items.filter(it => {
+      if (it.once && bought.includes(it.id)) return false;
+      if (it.id === 'vitrina' && state.legCap >= legCapMax) return false;
+      if (it.id === 'banquito' && state.benchSize >= benchMax) return false;
+      return (cfg.items[it.id].weight || 0) > 0;
+    });
+  }
+  /* Mostrador: N cosas distintas, sorteadas por peso */
+  function rollItems(cfg, items, rng = Math.random, state = {}) {
+    const pool = itemPool(cfg, items, state).slice(), out = [];
+    while (out.length < cfg.economy.itemsPerShop && pool.length) {
+      const tot = pool.reduce((a, it) => a + cfg.items[it.id].weight, 0);
+      let x = rng() * tot, k = pool.length - 1;
+      for (let i = 0; i < pool.length; i++) { x -= cfg.items[pool[i].id].weight; if (x < 0) { k = i; break; } }
+      out.push(pool.splice(k, 1)[0].id);
+    }
     return out;
   }
 
@@ -70,6 +88,7 @@
       if (result.shotsLeft > 0) lines.push({ key:'shots', n:result.shotsLeft, amount:result.shotsLeft * E.rewardShot });
     }
     if (result.goals > 0 && (result.win || !(lm && lm.noGoalPay))) lines.push({ key:'goals', n:result.goals, amount:result.goals * E.rewardGoal });
+    if (result.alcancia) lines.push({ key:'alcancia', n:1, amount:E.alcanciaPlata });
     if (result.gaseosa) {
       const sub = lines.reduce((a, l) => a + l.amount, 0);
       if (sub > 0) lines.push({ key:'gaseosa', n:1, amount: Math.round(sub * (E.gaseosaMult - 1)) });
@@ -106,19 +125,27 @@
     return picked;
   }
 
-  /* Legendario por vencer al jefe: partido 3 → La Mano, partido 6 → El Diez. */
+  /* Legendario por vencer al jefe: 3 → La Mano, 6 → El Diez, 9 (jefe final) → El Cacique. */
   function legendaryFor(match, cfg) {
     const m = cfg.economy.matchesPerRound;
-    return match === m ? 'mano' : match === 2 * m ? 'diez' : null;
+    return match === m ? 'mano' : match === 2 * m ? 'diez' : match === totalMatches(cfg) ? 'cacique' : null;
   }
-  /* Qué pasa con el legendario ganado: 'dup' (+plata), 'bench' (hay hueco) o 'choose' (banca llena). */
-  function legendaryOutcome(id, owned, bench) {
-    if (owned.includes(id)) return 'dup';
+  /* Qué pasa con el legendario ganado:
+       'dup'     ya lo tienes → se paga plata en su lugar
+       'capfull' llegaste al cupo de Legendarios → eliges cuál sueltas o rechazas el nuevo
+       'choose'  hay cupo pero la banca está llena → eliges qué descartar
+       'bench'   entra directo a la banca
+     ownedLeg = ids de los Legendarios que ya tienes (mesa + banca). */
+  function legendaryOutcome(id, ownedLeg, bench, cap) {
+    if (ownedLeg.includes(id)) return 'dup';
+    if (ownedLeg.length >= cap) return 'capfull';
     return bench.some(b => !b) ? 'bench' : 'choose';
   }
+  /* Los Legendarios no se venden ni se descartan (solo salen al elegir en 'capfull'). */
+  const canSell = doll => !!doll && doll.rarity !== 'legendario';
 
   const api = { BOSSES, BOSS_POOL, FINAL_BOSS, TABLE_MODS, totalMatches, isBoss, roundOf, bossFor, isFinalBoss, niceQuota, quotaFor, matchRewards,
-    tableModFor, planRun, priceOf, itemPrice, rollItems,
+    tableModFor, planRun, priceOf, itemPrice, rollItems, itemPool, canSell,
     rerollCost, sellValue, rarityWeights, rollShop, legendaryFor, legendaryOutcome };
   GOLIN.economy = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

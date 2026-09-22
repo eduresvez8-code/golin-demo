@@ -55,6 +55,10 @@
   /* El Diez: Mult base permanente. Kan-Té: rescates disponibles por tiro. */
   function baseMultOf(slots) { return 1 + activeOnTable(slots, 'diez').reduce((a, s) => a + s.doll.value, 0); }
   function kanteRescues(slots, cfg) { return activeOnTable(slots, 'kante').reduce((a, s) => a + powerOf(slots, s, cfg), 0); }
+  /* El Cacique: tiros extra que puede regalar cuando ibas a perder una vida (una vez por partido). */
+  function caciqueShots(slots, cfg) {
+    return activeOnTable(slots, 'cacique').reduce((a, s) => a + cfg.dolls.cacique.shots * powerOf(slots, s, cfg), 0);
+  }
   function diezList(slots, cfg) { return activeOnTable(slots, 'diez').map(s => ({ uid: s.doll.uid, power: powerOf(slots, s, cfg) })); }
 
   /* ---------- estado del tiro ---------- */
@@ -107,6 +111,7 @@
     cazagoles() {},                                         // +Mult al gol (ver goal())
     mano() {},                                              // actúa en el autogol
     diez() {},                                              // Mult base
+    cacique() {},                                           // salva la vida con un tiro extra (ver caciqueShots)
   };
 
   /* ev: {ballId, kind:'wall'|'rival'|'own', key, doll?, power?, muted?} */
@@ -208,7 +213,7 @@
   }
   const isExpelled = (inst, played) => inst.expelledFor === played;
 
-  const api = { scaleMult, isActive, powerOf, garraState, baseMultOf, kanteRescues, diezList,
+  const api = { scaleMult, isActive, powerOf, garraState, baseMultOf, kanteRescues, caciqueShots, diezList,
     newShot, inheritBall, contact, goal, resolve, rambosTick, isExpelled, EFFECTS };
   GOLIN.scoring = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
