@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GOLÍN — prototipo v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Permanent+Marker&family=Rubik:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="css/golin.css">
+</head>
+<body>
+<div id="app">
+  <aside id="debug" class="hidden"></aside>
+  <main id="center">
+    <header id="board"></header>
+    <div id="shotbar"></div>
+    <div id="stage">
+      <canvas id="game"></canvas>
+      <div id="tally">
+        <div class="trow"><span id="tPtsLbl"></span><span class="v" id="tPts">0</span></div>
+        <div class="trow"><span id="tMultLbl"></span><span class="v" id="tMult">×1</span></div>
+        <div id="tMods"></div>
+        <div id="tFinalRow"><small id="tFinalLbl"></small><br><span id="tFinal">0</span></div>
+        <div id="tNote" class="tnote"></div>
+        <div class="hintSkip" id="tSkip"></div>
+      </div>
+      <div id="panel" class="hidden"></div>
+    </div>
+  </main>
+  <aside id="side"></aside>
+</div>
+<button id="dbgToggle" class="btn">⚙ Debug (D)</button>
+<div id="tooltip" class="hidden"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+<script src="js/roster.js"></script>
+<script src="js/config.js"></script>
+<script src="js/strings.js"></script>
+<script src="js/scoring.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/economy.js"></script>
+<script src="js/progress.js"></script>
+<script src="js/telemetry.js"></script>
+<script src="js/art.js"></script>
+<script src="js/game.js"></script>
+<script src="js/ui.js"></script>
+<script>startGame();</script>
+</body>
+</html>
