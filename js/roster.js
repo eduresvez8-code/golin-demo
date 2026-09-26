@@ -26,9 +26,13 @@
   const ROSTER = [
     // ---------------- COMÚN ----------------
     { id:'poste', name:'El Poste', rarity:'comun', family:'sumador', price:3,
-      shape:{ kind:'circle', r:7 }, rest:0.95, head:'palo', params:{ pts:15 } },
+      shape:{ kind:'circle', r:10 }, rest:0.95, head:'palo', params:{ pts:20, second:2 } },   // r 7 → 10 (+43%)
     { id:'muro', name:'El Muro', rarity:'comun', family:'sumador', price:4,
       shape:{ kind:'rect', w:46, h:20 }, rest:0.75, head:'rapado', params:{ pts:40 } },
+    { id:'cambista', name:'El Cambista', rarity:'comun', family:'economia', price:4,
+      shape:{ kind:'circle', r:15 }, rest:0.85, head:'visera', params:{ plata:1 } },
+    { id:'antena', name:'La Antena', rarity:'comun', family:'manipulador', price:4,
+      shape:{ kind:'circle', r:14 }, rest:0.85, head:'antena', params:{ pts:12, radius:70, pull:9 } },
 
     // ---------------- RARO ----------------
     { id:'rebotador', name:'El Rebotador', rarity:'raro', family:'manipulador', price:5,
@@ -37,8 +41,8 @@
       shape:{ kind:'circle', r:16 }, rest:0.85, head:'gorra', params:{ pts:5, plata:1 } },
     { id:'ninamal', name:'La Niña Mal', rarity:'raro', family:'escalador', price:5,
       shape:{ kind:'circle', r:16 }, rest:0.85, head:'colitas', params:{ base:3, growth:3 } },
-    { id:'cabezon', name:'Cabezón', rarity:'raro', family:'multiplicador', price:6,
-      shape:{ kind:'circle', r:19 }, rest:0.85, head:'cabezota', params:{ mult:2 } },
+    { id:'cabezon', name:'Cabezón', rarity:'raro', family:'sumador', price:6,
+      shape:{ kind:'circle', r:19 }, rest:0.85, head:'cabezota', params:{ pts:30 } },
     { id:'garra', name:'La Garra', rarity:'raro', family:'condicional', price:6,
       shape:{ kind:'circle', r:16 }, rest:0.85, head:'bandana', params:{ shots:2, bonus:0.5 } },
     { id:'pirlito', name:'Pirlito', rarity:'raro', family:'manipulador', price:5,
@@ -47,12 +51,22 @@
       shape:{ kind:'circle', r:16 }, rest:0.85, head:'calvo', params:{ pts:15, force:16, trigger:2.5 } },
     { id:'rambos', name:'Rambos', rarity:'raro', family:'multiplicador', price:5, cursed:true,
       shape:{ kind:'circle', r:17 }, rest:0.85, head:'cresta', params:{ xmult:2, redAfter:3 } },
+    { id:'madrugador', name:'El Madrugador', rarity:'raro', family:'condicional', price:5,
+      shape:{ kind:'circle', r:16 }, rest:0.85, head:'gorrodormir', params:{ pts:10, xmult:1.5 } },
+    { id:'tardon', name:'El Tardón', rarity:'raro', family:'condicional', price:5,
+      shape:{ kind:'circle', r:16 }, rest:0.85, head:'despeinado', params:{ pts:10, xmult:1.5 } },
+    { id:'gato', name:'El Gato', rarity:'raro', family:'manipulador', price:6,
+      shape:{ kind:'circle', r:16 }, rest:0.85, head:'orejas', params:{ pts:10, chance:0.15 } },
+    { id:'costurera', name:'La Costurera', rarity:'raro', family:'posicional', price:6,
+      shape:{ kind:'circle', r:15 }, rest:0.85, head:'agujas', params:{ pts:5, mult:1 } },
+    { id:'caliente', name:'El Cabeza Caliente', rarity:'raro', family:'multiplicador', price:5, cursed:true,
+      shape:{ kind:'circle', r:17 }, rest:0.85, head:'llamas', params:{ xmult:1.8, penalty:1 } },
 
     // ---------------- ESPECIAL ----------------
     { id:'llave', name:'La Llave', rarity:'especial', family:'posicional', price:6,
       shape:{ kind:'circle', r:14 }, rest:0.85, head:'gorro', params:{ pts:5, factor:2 } },
-    { id:'veterano', name:'El Veterano', rarity:'especial', family:'escalador', price:5,
-      shape:{ kind:'circle', r:16 }, rest:0.85, head:'boina', params:{ base:5, growth:2 } },
+    { id:'veterano', name:'El Veterano', rarity:'especial', family:'condicional', price:5,
+      shape:{ kind:'circle', r:16 }, rest:0.85, head:'boina', params:{ pts:5, xmult:2, window:3 } },
     { id:'chilena', name:'Chilena', rarity:'especial', family:'condicional', price:6,
       shape:{ kind:'circle', r:16 }, rest:0.9, head:'copete', params:{ pts:10, xmult:3, needed:8 } },
     { id:'fantasma', name:'El Fantasma', rarity:'especial', family:'condicional', price:6,
@@ -67,6 +81,14 @@
       shape:{ kind:'circle', r:16 }, rest:0.85, head:'vincha', params:{ pts:20, curveTime:0.6, turn:2.6 } },
     { id:'cazagoles', name:'El Cazagoles', rarity:'especial', family:'multiplicador', price:7,
       shape:{ kind:'circle', r:16 }, rest:0.85, head:'mono', params:{ mult:4 } },
+    { id:'arquitecto', name:'El Arquitecto', rarity:'especial', family:'posicional', price:8,
+      shape:{ kind:'circle', r:15 }, rest:0.85, head:'casco', params:{ pts:5, factor:2 } },
+    { id:'colector', name:'El Colector', rarity:'especial', family:'economia', price:7,
+      shape:{ kind:'circle', r:16 }, rest:0.85, head:'sombrero', params:{ per:1, max:4 } },
+    { id:'revancha', name:'La Revancha', rarity:'especial', family:'condicional', price:6,
+      shape:{ kind:'circle', r:16 }, rest:0.85, head:'vendaje', params:{ pts:15, mult:2 } },
+    { id:'justiciero', name:'El Justiciero', rarity:'especial', family:'multiplicador', price:8,
+      shape:{ kind:'circle', r:16 }, rest:0.85, head:'sheriff', params:{} },
 
     // ---------------- LEGENDARIO (solo jefes) ----------------
     { id:'mano', name:'La Mano', rarity:'legendario', family:'condicional', price:0, shop:false,
@@ -75,6 +97,8 @@
       shape:{ kind:'circle', r:17 }, rest:0.85, head:'rizos', params:{ growth:1 } },
     { id:'cacique', name:'El Cacique', rarity:'legendario', family:'condicional', price:0, shop:false,
       shape:{ kind:'circle', r:17 }, rest:0.85, head:'penacho', params:{ shots:1 } },
+    { id:'capitan', name:'El Capitán', rarity:'legendario', family:'condicional', price:0, shop:false,
+      shape:{ kind:'circle', r:17 }, rest:0.85, head:'laurel', params:{ factor:2 } },
   ];
 
   /* ===================== MOSTRADOR DE DON CHUCHO =====================

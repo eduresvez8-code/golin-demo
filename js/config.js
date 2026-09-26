@@ -97,13 +97,32 @@
   }
 
   const clone = o => JSON.parse(JSON.stringify(o));
+  /* Límites de seguridad: lo que venga de localStorage o de un JSON importado se recorta a estos
+     rangos. Sin ellos, un valor absurdo (una banca de mil millones de puestos, 1e9 sub-pasos de
+     física) colgaría la pestaña. Cualquier otro número debe ser finito y |v| ≤ 1e9. */
+  const BOUNDS = {
+    'physics.substeps': [1, 32], 'physics.maxShot': [1, 200], 'physics.stopSpeed': [0.01, 10],
+    'economy.shotsPerMatch': [1, 10], 'economy.shopSize': [1, 6], 'economy.benchSize': [1, 8], 'economy.benchMax': [1, 8],
+    'economy.pocketSize': [0, 6], 'economy.itemsPerShop': [0, 6], 'economy.legendaryCap': [0, 6], 'economy.legendaryCapMax': [0, 6],
+    'economy.lives': [1, 9], 'economy.rounds': [1, 10], 'economy.matchesPerRound': [1, 10], 'economy.quotaGrowth': [1, 10],
+    'economy.stage1To': [1, 100], 'economy.stage2To': [1, 100], 'juice.hitstopMs': [0, 1000], 'juice.slowmoDur': [0, 5],
+    'juice.slowmoScale': [0.05, 1], 'juice.goalShakeMax': [0, 3],
+  };
+  function safeNumber(path, v) {
+    if (typeof v !== 'number' || !isFinite(v)) return null;
+    const b = BOUNDS[path];
+    if (b) return Math.min(b[1], Math.max(b[0], v));
+    return Math.min(1e9, Math.max(-1e9, v));
+  }
   // Mezcla solo las claves que existen en el destino (así un JSON viejo no mete basura)
-  function mergeKnown(dst, src) {
-    if (!src || typeof src !== 'object') return dst;
+  function mergeKnown(dst, src, path = '') {
+    if (!src || typeof src !== 'object' || Array.isArray(src)) return dst;
     for (const k of Object.keys(dst)) {
-      if (!(k in src)) continue;
-      if (dst[k] && typeof dst[k] === 'object') mergeKnown(dst[k], src[k]);
-      else if (typeof dst[k] === typeof src[k]) dst[k] = src[k];
+      if (!Object.prototype.hasOwnProperty.call(src, k)) continue;
+      const p = path ? path + '.' + k : k;
+      if (dst[k] && typeof dst[k] === 'object') mergeKnown(dst[k], src[k], p);
+      else if (typeof dst[k] === 'number') { const v = safeNumber(p, src[k]); if (v !== null) dst[k] = v; }
+      else if (typeof dst[k] === 'boolean' && typeof src[k] === 'boolean') dst[k] = src[k];
     }
     return dst;
   }
@@ -129,11 +148,29 @@
   function getPath(path) { return path.split('.').reduce((o, k) => (o ? o[k] : undefined), CFG); }
   function setPath(path, v) {
     const keys = path.split('.'), last = keys.pop();
-    const o = keys.reduce((a, k) => a[k], CFG); o[last] = v; save();
+    const o = keys.reduce((a, k) => (a && Object.prototype.hasOwnProperty.call(a, k) ? a[k] : undefined), CFG);
+    if (!o || !Object.prototype.hasOwnProperty.call(o, last)) return;          // solo claves que ya existen
+    if (typeof o[last] === 'number') { const n = safeNumber(path, v); if (n === null) return; o[last] = n; }
+    else if (typeof o[last] === 'boolean') o[last] = !!v;
+    else return;
+    save();
+  }
+  /* Opciones del jugador (accesibilidad): solo claves conocidas, del tipo correcto y en rango. */
+  const OPT_RANGES = { shake: [0, 1], master: [0, 1], music: [0, 1], sfx: [0, 1], textScale: [0.85, 1.35] };
+  function sanitizeOptions(raw, defaults) {
+    const out = Object.assign({}, defaults);
+    if (!raw || typeof raw !== 'object') return out;
+    for (const k of Object.keys(defaults)) {
+      if (!Object.prototype.hasOwnProperty.call(raw, k)) continue;
+      const v = raw[k];
+      if (typeof defaults[k] === 'boolean') out[k] = v === true;
+      else if (typeof v === 'number' && isFinite(v)) { const r = OPT_RANGES[k] || [0, 1]; out[k] = Math.min(r[1], Math.max(r[0], v)); }
+    }
+    return out;
   }
 
   GOLIN.CFG = CFG;
   GOLIN.CFG_DEFAULTS = DEFAULTS;
-  GOLIN.config = { save, reset, exportJSON, importJSON, getPath, setPath, mergeKnown, clone };
+  GOLIN.config = { save, reset, exportJSON, importJSON, getPath, setPath, mergeKnown, clone, safeNumber, sanitizeOptions, BOUNDS };
   if (typeof module !== 'undefined' && module.exports) module.exports = { CFG, DEFAULTS, config: GOLIN.config };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -89,6 +89,7 @@
     }
     if (result.goals > 0 && (result.win || !(lm && lm.noGoalPay))) lines.push({ key:'goals', n:result.goals, amount:result.goals * E.rewardGoal });
     if (result.alcancia) lines.push({ key:'alcancia', n:1, amount:E.alcanciaPlata });
+    if (result.colector > 0) lines.push({ key:'colector', n:1, amount:result.colector });
     if (result.gaseosa) {
       const sub = lines.reduce((a, l) => a + l.amount, 0);
       if (sub > 0) lines.push({ key:'gaseosa', n:1, amount: Math.round(sub * (E.gaseosaMult - 1)) });
@@ -141,11 +142,24 @@
     if (ownedLeg.length >= cap) return 'capfull';
     return bench.some(b => !b) ? 'bench' : 'choose';
   }
+  /* El jefe final da El Cacique; si ya desbloqueaste a El Capitán, te deja elegir entre los dos. */
+  function legendaryChoices(match, cfg, unlocked) {
+    const base = legendaryFor(match, cfg);
+    if (!base) return [];
+    return base === 'cacique' && unlocked && unlocked.includes('capitan') ? ['cacique', 'capitan'] : [base];
+  }
+  /* El Colector: al cobrar el partido, +per de plata por cada rareza distinta en tu mesa (tope max). */
+  function colectorPay(slots, cfg, DOLLS) {
+    const live = slots.filter(s => s.doll && !s.doll.muted && !s.doll.expelled);
+    const rarities = new Set(live.map(s => DOLLS[s.doll.id].rarity)).size;
+    const p = cfg.dolls.colector;
+    return live.filter(s => s.doll.id === 'colector').length ? Math.min(p.max, p.per * rarities) * live.filter(s => s.doll.id === 'colector').length : 0;
+  }
   /* Los Legendarios no se venden ni se descartan (solo salen al elegir en 'capfull'). */
   const canSell = doll => !!doll && doll.rarity !== 'legendario';
 
   const api = { BOSSES, BOSS_POOL, FINAL_BOSS, TABLE_MODS, totalMatches, isBoss, roundOf, bossFor, isFinalBoss, niceQuota, quotaFor, matchRewards,
-    tableModFor, planRun, priceOf, itemPrice, rollItems, itemPool, canSell,
+    tableModFor, planRun, priceOf, itemPrice, rollItems, itemPool, canSell, legendaryChoices, colectorPay,
     rerollCost, sellValue, rarityWeights, rollShop, legendaryFor, legendaryOutcome };
   GOLIN.economy = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

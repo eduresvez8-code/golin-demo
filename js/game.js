@@ -26,7 +26,7 @@ const MAX_BALLS = 8;
 const G = {
   state:'aim', match:1, quota:0, total:0, shotsLeft:0, plata:0, lives:3,
   won:0, bestShot:0, goals:0, lastWin:false, hasShot:false,
-  slots:[], offers:[], rerollN:0, sellMode:false, selectedOffer:null,
+  slots:[], offers:[], rerollN:0, sellMode:false, selectedOffer:null, pick:null,
   ballX:300, fast:false,
 };
 RODS.forEach((rod, ri) => {
@@ -36,13 +36,21 @@ let shot = null, balls = [], dollUid = 1;
 Object.assign(G, { played:0, boss:null, forceBoss:null, endless:false, manoUsed:false, reachedQuota:false, bench:[], stats:{ goals:0, use:{}, reached:1 } });
 
 /* Opciones del jugador (accesibilidad). Se guardan aparte de la config de balance. */
-const OPT = Object.assign({ shake:1, reduceFlashes:false, fast:false, colorblind:false, master:0.8, music:0.5, sfx:0.9, textScale:1 },
-  (() => { try { return JSON.parse(localStorage.getItem('golinOptions') || '{}'); } catch (e) { return {}; } })());
+const OPT = GOLIN.config.sanitizeOptions(
+  (() => { try { return JSON.parse(localStorage.getItem('golinOptions') || '{}'); } catch (e) { return {}; } })(),
+  { shake:1, reduceFlashes:false, fast:false, colorblind:false, master:0.8, music:0.5, sfx:0.9, textScale:1 });
 function saveOptions() { try { localStorage.setItem('golinOptions', JSON.stringify(OPT)); } catch (e) {} }
+
+/* ¿Pantalla táctil? Cambia textos ("toca" en vez de "clic") y agranda las zonas para el dedo.
+   ¿Pantalla angosta (celular, tableta vertical)? Entonces el panel lateral es una hoja que sube desde abajo. */
+const MQ_COARSE = matchMedia('(pointer: coarse)'), MQ_COMPACT = matchMedia('(max-width: 900px)');
+GOLIN.touch = MQ_COARSE.matches;
+const isCompact = () => MQ_COMPACT.matches;
+function setTouch(v) { if (GOLIN.touch === v) return; GOLIN.touch = v; tableDirty = true; refreshTexts(); }
 
 /* Progreso entre picaditos (desbloqueos, canchas, tutorial). Lógica pura en js/progress.js */
 const PR = GOLIN.progress;
-const PROFILE = Object.assign(PR.newProfile(), (() => { try { return JSON.parse(localStorage.getItem('golinProfile') || '{}'); } catch (e) { return {}; } })());
+const PROFILE = PR.sanitizeProfile((() => { try { return JSON.parse(localStorage.getItem('golinProfile') || '{}'); } catch (e) { return {}; } })(), GOLIN.ROSTER.map(d => d.id));
 function saveProfile() { try { localStorage.setItem('golinProfile', JSON.stringify(PROFILE)); } catch (e) {} }
 let LM = PR.levelMods(1);                   // reglas de la cancha actual
 Object.assign(G, { metaBase:0, matchStart:0, matchQuota:0, retry:false, level:1, plan:null, mod:null, pocket:[], shopItems:[], matchFlags:{}, nextShot:{}, runFlags:{}, itemsBought:[], legCap:2, caciqueUsed:false, windDir:1, wonOnLastShot:false });
@@ -67,6 +75,15 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const wait = ms => sleep(G.fast ? ms / 5 : ms);
 const nice = q => Math.max(50, Math.round(q / 50) * 50);
 function bump(el) { if (!el) return; el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
+/* Los números del marcador se achican si no caben (modo sin fin en un celular: 123.456.789 / 234.567.890) */
+function fitBoardText() {
+  document.querySelectorAll('#board .cell b').forEach(el => {
+    el.style.fontSize = '';
+    const max = el.parentElement.clientWidth - 10; if (max <= 0) return;
+    let fs = parseFloat(getComputedStyle(el).fontSize);
+    while (el.scrollWidth > max && fs > 9) { fs -= 1; el.style.fontSize = fs + 'px'; }
+  });
+}
 function countUp(el, from, to, ms, onTick) {
   return new Promise(res => {
     const dur = G.fast ? ms / 5 : ms; const t0 = now(); let shown = null;
@@ -74,7 +91,7 @@ function countUp(el, from, to, ms, onTick) {
       const k = Math.min(1, (now() - t0) / dur), e = 1 - Math.pow(1 - k, 3);
       const v = Math.round(from + (to - from) * e);
       if (v !== shown) { el.textContent = fmt(v); shown = v; if (onTick) onTick(k); }
-      if (k < 1) requestAnimationFrame(f); else res();
+      if (k < 1) requestAnimationFrame(f); else { fitBoardText(); res(); }
     })();
   });
 }
@@ -232,6 +249,8 @@ function physicsStep(ms) {
   for (const sp of pendingSplits) doSplit(sp.bo, sp.count);
   for (const g of pendingGoals) {
     const bo = g.bo; if (!bo.alive) continue;
+    // El Gato: cada vez que un balón va a entrar en tu arco, tira su probabilidad de atajarlo
+    if (g.which === 'own' && Math.random() < SC.gatoChance(G.slots, CFG)) { gatoSave(bo); continue; }
     bo.alive = false; bo.moving = false;
     World.remove(engine.world, bo.body);
     onGoal(bo, g.which, bo.body.position);
@@ -241,6 +260,15 @@ function physicsStep(ms) {
   for (const bo of balls) {
     if (!bo.alive || !bo.moving) continue;
     let v = getV(bo.body), sp = Math.hypot(v.x, v.y);
+    for (const s of G.slots) {                       // La Antena: tirón suave hacia ella
+      if (!s.doll || s.doll.id !== 'antena' || !SC.isActive(s.doll)) continue;
+      const p = dc('antena'), dx = s.x - bo.body.position.x, dy = s.y - bo.body.position.y, d = Math.hypot(dx, dy);
+      if (d < p.radius && d > 1) {
+        const k = p.pull * powerOf(s) * dt * (1 - d / p.radius);
+        v = { x: v.x + dx / d * k, y: v.y + dy / d * k }; sp = Math.hypot(v.x, v.y);
+        if (!bo.antenaHit) { bo.antenaHit = true; activated('antena'); }
+      }
+    }
     // Cancha Torcida: un empujón lateral constante
     if (G.boss === 'torcida' && sp > 0.05) { v = { x: v.x + G.windDir * CFG.bosses.torcidaWind * dt, y: v.y }; sp = Math.hypot(v.x, v.y); }
     // Bekam: fuerza lateral suave que curva el balón hacia el arco rival
@@ -298,6 +326,16 @@ function moveRivals(ms) {
   }
 }
 const rivalBodies = () => rivals.map(r => r.body);
+/* El Gato: el balón que iba a tu arco rebota hacia afuera */
+function gatoSave(bo) {
+  const p = bo.body.position, v = getV(bo.body);
+  Body.setPosition(bo.body, { x: clamp(p.x, GO.x1 + 14, GO.x2 - 14), y: T.b - BALL_R - 4 });
+  Body.setVelocity(bo.body, { x: v.x * 0.6, y: -Math.max(6, Math.abs(v.y) * 0.8) });
+  const gs = G.slots.find(s => s.doll && s.doll.id === 'gato' && SC.isActive(s.doll));
+  if (gs) { gs.doll.hitT = now(); streaks.push({ x1: gs.x, y1: gs.y, x2: p.x, y2: T.b - 10, t: now() }); }
+  bigText(t('fx.gato'), '#f4ead5', 1100, '', { prio:'now', small:true });
+  SFX.kante(); sparks(p.x, T.b - 10, '#f4ead5', 16, 4); activated('gato');
+}
 function kanteRescue(bo) {
   const p = bo.body.position, d = dirToGoal(p), f = dc('kante').force;
   Body.setVelocity(bo.body, { x: d.x * f, y: d.y * f }); bo.still = 0;
@@ -326,11 +364,20 @@ function phys(k) {
   if (G.mod === 'pesada' && k === 'rollFric') v *= M.pesadaRoll;
   return v;
 }
+/* Lo que paga una BANDA. Siempre vale scoring.wallPts (15); SOLO estas reglas lo cambian,
+   y cada una se anuncia en la barra ("Bandas ×2 · Tapete pesado") y en cada banda doblada:
+     · Tapete pesado (mesa especial de los partidos 2, 5 u 8): ×2
+     · La Pólvora (consumible, un tiro): ×2
+     · El Tacaño (jefe): las bandas no pagan */
+function wallRule() {
+  let m = 1; const reasons = [];
+  if (shotItems().polvora) { m *= CFG.economy.polvoraWallPts; reasons.push('polvora'); }
+  if (G.mod === 'pesada') { m *= CFG.tableMods.pesadaWallPts; reasons.push('pesada'); }
+  if (G.boss === 'tacano') { m = 0; reasons.push('tacano'); }
+  return { m, reasons };
+}
 function scoringCfg() {
-  let w = CFG.scoring.wallPts;
-  if (shotItems().polvora) w *= CFG.economy.polvoraWallPts;   // La Pólvora: bandas al doble
-  if (G.boss === 'tacano') w = 0;                        // El Tacaño: las bandas no pagan
-  if (G.mod === 'pesada') w *= CFG.tableMods.pesadaWallPts;
+  const w = CFG.scoring.wallPts * wallRule().m;
   return w === CFG.scoring.wallPts ? CFG : Object.assign({}, CFG, { scoring: Object.assign({}, CFG.scoring, { wallPts: w }) });
 }
 function beginShot() {
@@ -338,6 +385,8 @@ function beginShot() {
   return SC.newShot({
     baseMult: SC.baseMultOf(G.slots) + (G.nextShot.empanada ? CFG.economy.empanadaMult : 0) + (G.matchFlags.radio ? CFG.economy.radioMult : 0),
     garra: SC.garraState(G.slots, CFG, G.shotsLeft, G.total, G.quota),
+    shotsLeft: G.shotsLeft, shotNo: (G.shotsTaken || 0) + 1, matchId: G.played, lostPrev: G.lostPrev,
+    justiciero: SC.justicieroOn(G.slots), calientes: SC.calienteList(G.slots),
     kante: SC.kanteRescues(G.slots, CFG),
     diez: SC.diezList(G.slots, CFG),
   });
@@ -350,7 +399,7 @@ function onContact(bo, other, n, impact) {
   const kind = other.plugin.kind === 'wall' ? 'wall' : other.plugin.kind === 'rival' ? 'rival' : 'own';
   const ev = { ballId: bo.id, kind, key: 'b' + other.id };
   let slot = null;
-  if (kind === 'own') { slot = other.plugin.slot; ev.doll = slot.doll; ev.power = powerOf(slot); ev.muted = !!slot.doll.muted; }
+  if (kind === 'own') { slot = other.plugin.slot; ev.doll = slot.doll; ev.power = powerOf(slot); ev.muted = !!slot.doll.muted; ev.stitch = SC.stitchBonus(G.slots, slot, CFG); }
   const fx = SC.contact(shot, ev, scoringCfg(), Math.random);
   presentContact(bo, other, slot, n, impact, fx, ev.power || 1);
 }
@@ -361,14 +410,19 @@ function presentContact(bo, other, slot, n, impact, fx, power) {
   let multHit = false, gavePts = false;
   if (slot) {
     const d = slot.doll; d.hitT = now(); d.nx = n.x; d.ny = n.y;
-    if (power > 1 && !d.muted) { flashLlaves(slot); activated('llave'); }
+    if (power > 1 && !d.muted) {
+      flashLlaves(slot);
+      if (G.slots.some(x => x.rod === slot.rod && Math.abs(x.i - slot.i) === 1 && x.doll && x.doll.id === 'llave')) activated('llave');
+      if (G.slots.some(x => x !== slot && x.rod === slot.rod && x.doll && x.doll.id === 'arquitecto' && SC.isActive(x.doll))) activated('arquitecto');
+      if (d.captain) activated('capitan');
+    }
     stats(d.id, 1);
   }
   for (const f of fx) {
     switch (f.type) {
-      case 'pts': addPoints(f.v, px, py, f.src === 'wall'); gavePts = true; if (['poste', 'muro', 'ninamal', 'veterano'].includes(f.src)) activated(f.src); break;
+      case 'pts': addPoints(f.v, px, py, f.src === 'wall'); gavePts = true; if (['poste', 'muro', 'ninamal', 'cabezon'].includes(f.src)) activated(f.src); break;
       case 'mult': addMult(f.v, px, py); multHit = true; activated(f.src); break;
-      case 'plata': activated('tendero'); G.plata += f.v; updateBoard(); popText('+' + f.v, px + 18, py + 14, 13, '#ffc93c', 'plata'); SFX.coin(); break;
+      case 'plata': activated(f.src || 'tendero'); G.plata += f.v; updateBoard(); popText('+' + f.v, px + 18, py + 14, 13, '#ffc93c', 'plata'); SFX.coin(); break;
       case 'tendero': popText(t('fx.tendero'), slot.x, slot.y - 30, 16, '#f4ead5', 'text'); break;
       case 'pirlo': bo.pirlo = Math.max(bo.pirlo, f.bounces); popText(t('fx.pirlito'), slot.x, slot.y - 30, 14, '#f4ead5', 'text'); break;
       case 'gambeta': bo.gambeta = true; break;
@@ -391,10 +445,12 @@ function presentContact(bo, other, slot, n, impact, fx, power) {
   MUSIC.setIntensity(shot.effects >= CFG.juice.comboEffects ? 4 : shot.contacts >= 8 ? 3 : shot.contacts >= 4 ? 2 : 0);
   updateShotbar();
 }
-function addPoints(v, x, y, small) {
+function addPoints(v, x, y, wall) {
   shot.points += 0;   // el valor ya lo sumó scoring.contact
   const k = Math.log2(1 + v / 8);
-  popText('+' + fmt(v), x, y, (small ? 11 : 13) + 6 * k, '#2EC4B6', 'pts');
+  // una banda que no paga lo normal lleva su etiqueta ("×2"), para que nunca sea un misterio
+  const tag = wall && v !== CFG.scoring.wallPts ? '×' + fm(v / CFG.scoring.wallPts) : '';
+  popText('+' + fmt(v), x, y, (wall ? 11 : 13) + 6 * k, '#2EC4B6', 'pts', tag);
   bumpNext.pts = true;
 }
 function addMult(v, x, y) {
@@ -444,7 +500,7 @@ const popups = [], particles = [], rings = [], wallFlashes = [], links = [], str
 let shakeAmp = 0, shakeUntil = 0, hitstop = 0, slowmoLeft = 0, timeScale = 1, redFlash = -9999;
 const bumpNext = { pts:false, mult:false };
 /* kind: 'pts' ficha cian · 'mult' sello rojo · 'plata' círculo dentado · 'text' placa de texto */
-function popText(text, x, y, size, color, kind = 'text') { popups.push({ text, x, y, size, color, kind, t:now(), life: 900 + size * 12, vx:(Math.random() - 0.5) * 30 }); }
+function popText(text, x, y, size, color, kind = 'text', tag = '') { size *= TXT_K; popups.push({ text, x, y, size, color, kind, tag, t:now(), life: 900 + size * 12, vx:(Math.random() - 0.5) * 30 }); }
 /* Textos grandes en cola: se muestran de a uno. prio 'now' (gol, autogol) pasa adelante de todo.
    small = cartel más chico para avisos cortos ("¡Casi!", consumibles). */
 const bigQ = []; let bigCur = null;
@@ -498,7 +554,7 @@ function shoot(vx, vy, power) {
   shot = beginShot();                      // antes de descontar el tiro (La Garra cuenta este)
   shot.items = G.nextShot; G.nextShot = {};
   if (shot.items.pito) closeOwnGoal(true);
-  G.state = 'shooting'; G.shotsLeft--;
+  G.state = 'shooting'; G.shotsLeft--; G.shotsTaken = (G.shotsTaken || 0) + 1;
   const b = balls[0]; b.moving = true;
   Body.setVelocity(b.body, { x:vx, y:vy });
   SFX.shoot(power); addShake(CFG.juice.shake * 1.5 * power, 0.15);
@@ -525,6 +581,7 @@ function useItem(i) {
   else G.nextShot[id] = true;
   bigText(t('item.' + id + '.used'), '#f4ead5', 1000, '', { small:true }); SFX.levelup();
   LOG.item(id); updateBoard(); updateShotbar(); renderSide();
+  if (id === 'polvora') coach('walls2');
 }
 function checkSlowmo() {
   for (const bo of balls) {
@@ -551,7 +608,8 @@ function stepLabel(st) {
     case 'garra': return t('mod.garra', { pct: st.pct });
     case 'chilena': return st.fail ? t('mod.chilenaFail', { n: st.n, needed: st.needed }) : t('mod.chilena', { n: st.n });
     case 'fantasma': return st.fail ? t('mod.fantasmaFail', { t: st.t == null ? '—' : st.t.toFixed(1) }) : t('mod.fantasma', { t: st.t.toFixed(2) });
-    default: return t('mod.' + st.key);
+    case 'veterano': return st.fail ? t('mod.veteranoFail') : t('mod.veterano');
+    default: return t('mod.' + st.key + (st.fail && GOLIN.STRINGS.es['mod.' + st.key + 'Fail'] ? 'Fail' : ''));
   }
 }
 async function scoreShot() {
@@ -599,6 +657,7 @@ async function scoreShot() {
   // récord del picadito: engancha a "un tiro más"
   if (final > G.bestShot && G.bestShot > 0) { $('tNote').textContent = t('fx.best'); $('tNote').className = 'tnote show best'; SFX.stinger(); addShake(CFG.juice.shake * 5, 0.3); }
   G.bestShot = Math.max(G.bestShot, final);
+  if (final > (PROFILE.bestShotEver || 0)) { PROFILE.bestShotEver = final; saveProfile(); }   // grafiti de la reja
   await wait(final > 0 ? 180 : 60);
 
   // Escaladores (Niña Mal, Veterano, El Diez): crecen al terminar el tiro
@@ -611,8 +670,17 @@ async function scoreShot() {
   // Rambos: cuenta tiros tocándolo; a los 3, roja para el partido siguiente
   for (const uid of R.rambos) {
     const sl = G.slots.find(x => x.doll && x.doll.uid === uid); if (!sl) continue;
-    if (SC.rambosTick(sl.doll, CFG, G.played)) { popText(t('fx.roja'), sl.x, sl.y - 30, 24, '#E63946', 'text'); SFX.whistle(); await wait(300); }
+    if (s.justiciero && SC.justicieroOn(G.slots)) { activated('justiciero'); continue; }   // El Justiciero: sin roja
+    if (SC.rambosTick(sl.doll, CFG, G.played, s.justiciero)) { popText(t('fx.roja'), sl.x, sl.y - 30, 24, '#E63946', 'text'); SFX.whistle(); await wait(300); }
   }
+  // El Cabeza Caliente que no tocaste: −plata (El Justiciero lo evita)
+  if (R.penalty > 0) {
+    G.plata = Math.max(0, G.plata - R.penalty); updateBoard(); SFX.error();
+    for (const uid of s.calientes) if (!s.touched.has(uid)) {
+      const sl = G.slots.find(x => x.doll && x.doll.uid === uid);
+      if (sl) { sl.doll.hitT = now(); popText('-' + dc('caliente').penalty, sl.x, sl.y - 26, 16, '#FFC93C', 'plata'); }
+    }
+  } else if (s.justiciero && s.calientes.some(uid => !s.touched.has(uid))) activated('justiciero');
   await wait(final > 0 ? 200 : 80);
   tally.className = ''; tallyMult = 1; MUSIC.setIntensity(0);
   const before = G.total;
@@ -621,7 +689,7 @@ async function scoreShot() {
   updateBoard();
   // cuánto falta para la cuota: siempre saber qué tan cerca estás
   if (before < G.quota && G.total >= G.quota) {
-    G.reachedQuota = true; G.wonOnLastShot = G.shotsLeft === 0;
+    G.reachedQuota = true; G.wonOnLastShot = G.shotsLeft === 0; G.wonOnFirstShot = G.shotsTaken === 1;
     $('board').classList.add('victory'); SFX.victory();
     bigText(t('fx.quota'), '#FFC93C', 1300);
     await wait(650);
@@ -658,21 +726,23 @@ const EC = GOLIN.economy;
 function endMatch(win) {
   if (G.state === 'matchend') return;
   G.state = 'matchend'; G.lastWin = win;
-  const rw = EC.matchRewards({ win, shotsLeft: G.shotsLeft, goals: G.goals, gaseosa: !!G.matchFlags.gaseosa, alcancia: !!G.runFlags.alcancia }, CFG, LM);
+  const rw = EC.matchRewards({ win, shotsLeft: G.shotsLeft, goals: G.goals, gaseosa: !!G.matchFlags.gaseosa, alcancia: !!G.runFlags.alcancia, colector: EC.colectorPay(G.slots, CFG, DOLL) }, CFG, LM);
+  if (rw.lines.some(l => l.key === 'colector')) activated('colector');
   if (win) G.won++; else G.lives--;
   // Marcador acumulado: al ganar, la meta alcanzada es la base del próximo partido y lo que sobra se arrastra.
   // Al perder, el partido se repite desde el marcador con el que empezó.
   if (win) { G.metaBase = G.quota; G.retry = false; } else G.retry = true;
   LOG.endMatch({ win, total: G.total - G.matchStart, marcador: G.total, reward: rw.total, shotsLeft: G.shotsLeft });
-  progressEvent({ type:'match', win, match: G.match, boss: G.boss, goals: G.goals, wonOnLastShot: G.wonOnLastShot });
+  progressEvent({ type:'match', win, match: G.match, boss: G.boss, goals: G.goals, wonOnLastShot: G.wonOnLastShot, wonOnFirstShot: G.wonOnFirstShot, level: G.level });
   G.stats.reached = Math.max(G.stats.reached || 0, G.match);
   updateBoard(); updateShotbar();
   showMatchEnd(win, rw);               // la UI cobra la plata y luego llama a afterMatch()
 }
 function afterMatch(win) {
   if (!win && G.lives <= 0) return showFinal(false);
-  const leg = win ? EC.legendaryFor(G.match, CFG) : null;
-  if (leg) return grantLegendary(leg, () => afterLegendary(win));
+  const legs = win ? EC.legendaryChoices(G.match, CFG, PROFILE.unlocked) : [];
+  if (legs.length > 1) return showLegendaryPick(legs, id => grantLegendary(id, () => afterLegendary(win)));
+  if (legs.length) return grantLegendary(legs[0], () => afterLegendary(win));
   afterLegendary(win);
 }
 function afterLegendary(win) {
@@ -708,14 +778,14 @@ function grantLegendary(id, done) {
   showLegendary(id, out, inst, done);
 }
 function openShop() {
-  G.state = 'shop'; G.sellMode = false; G.selectedOffer = null; G.rerollN = 0;
+  G.state = 'shop'; G.sellMode = false; G.selectedOffer = null; G.pick = null; G.rerollN = 0;
   $('board').classList.remove('victory');
   endDrag();
   G.offers = EC.rollShop(G.match, CFG, PR.shopPool(GOLIN.ROSTER, PROFILE));
   G.shopItems = EC.rollItems(CFG, GOLIN.ITEMS, Math.random, itemState());
   MUSIC.setMode('shop'); MUSIC.setIntensity(0);
-  coach('shop');
   resetBall(); renderSide(); updateShotbar(); updateBoard();
+  playShopIntro(() => { if (isCompact()) openSheet(); coach('shop'); if (legendaryIds().length) coach('legend'); else if (G.pocket.length || G.shopItems.length) coach('items'); });
 }
 function rerollShop() {
   const c = EC.rerollCost(G.rerollN, CFG);
@@ -735,14 +805,18 @@ function startMatch() {
   endDrag();
   G.boss = G.forceBoss || EC.bossFor(G.match, CFG, G.plan);
   G.mod = G.boss ? null : EC.tableModFor(G.match, CFG, G.plan);
+  G.lostPrev = G.retry;                            // La Revancha: ¿perdiste el partido anterior?
   if (G.retry) G.total = G.matchStart; else G.matchStart = G.total;
+  for (const s of G.slots) if (s.doll) s.doll.captain = false;   // la cinta se elige cada partido
+  G.wonOnFirstShot = false;
   G.matchQuota = EC.quotaFor(G.match, CFG, LM);
   G.quota = G.metaBase + G.matchQuota;              // meta acumulada del picadito
-  G.shotsLeft = shotsPerMatch(); G.goals = 0;
+  G.shotsLeft = shotsPerMatch(); G.shotsTaken = 0; G.goals = 0;
   G.matchFlags = {}; G.nextShot = {}; G.caciqueUsed = false; G.wonOnLastShot = false; G.windDir = Math.random() < 0.5 ? -1 : 1;
   LOG.startMatch({ match: G.match, boss: G.boss, mod: G.mod, quota: G.matchQuota, meta: G.quota, carry: G.total - G.metaBase, shotsAllowed: G.shotsLeft,
     table: G.slots.filter(s => s.doll).map(s => s.doll.id), plata: G.plata });
-  G.sellMode = false; G.selectedOffer = null; shot = null;
+  G.sellMode = false; G.selectedOffer = null; G.pick = null; shot = null;
+  closeSheet();
   G.played++; G.manoUsed = false; G.reachedQuota = false;
   for (const s of G.slots) if (s.doll) s.doll.rojas = 0;   // Rambos: la cuenta de tiros es por partido
   $('board').classList.remove('victory');
@@ -754,10 +828,19 @@ function startMatch() {
 function beginMatchPlay() {
   G.state = 'aim'; MUSIC.setMode('match'); MUSIC.setIntensity(0);
   $('panel').classList.add('hidden');
+  // la meta ya viene cubierta por lo que arrastraste del partido anterior
+  if (G.total >= G.quota) G.reachedQuota = true;
+  // El Capitán: antes del primer tiro eliges a quién le pones la cinta
+  const cap = G.slots.find(s => s.doll && s.doll.id === 'capitan' && SC.isActive(s.doll));
+  if (cap && G.slots.some(s => s.doll && s.doll.id !== 'capitan' && SC.isActive(s.doll)) && !G.captainAsked) {
+    G.captainAsked = true; return showCaptainPick(() => beginMatchPlay());   // al volver, ya no pregunta
+  }
+  G.captainAsked = false;
   bigText(G.mod ? t('mod.' + G.mod + '.name') : t('fx.match', { n:G.match }), '#f4ead5', 1700,
     G.mod ? t('mod.' + G.mod + '.rule') : t('fx.quotaSub', { q:fmt(G.quota), f:fmt(Math.max(0, G.quota - G.total)) }));
   updateShotbar(); renderSide();
   coach(G.match === 1 && !G.hasShotRun ? 'aim' : G.match === 2 ? 'table' : null);
+  if (G.mod) coach(wallRule().m !== 1 ? 'walls2' : 'mod');
 }
 function shotsPerMatch() { return Math.max(1, CFG.economy.shotsPerMatch + LM.shots); }
 function resetRun(level) {
@@ -852,6 +935,7 @@ function dropOn(src, dst) {
 /* ===================== INPUT ===================== */
 const canvas = $('game'), ctx = canvas.getContext('2d');
 let VIEW_K = 1;
+let TXT_K = 1;          // en pantallas chicas los textos de la mesa crecen un poco para que se lean
 function toWorld(cx, cy) {
   const r = canvas.getBoundingClientRect();
   return { x: (cx - r.left) * CW / r.width, y: (cy - r.top) * CH / r.height, inside: cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom };
@@ -861,72 +945,131 @@ function slotAt(x, y, maxD = 36) {
   for (const s of G.slots) { const d = Math.hypot(s.x - x, s.y - y); if (d < bd) { bd = d; best = s; } }
   return best;
 }
-function dollAt(x, y) {
+function dollAt(x, y, fat) {
+  const pad = fat ? 12 : 0;                               // el dedo es más grueso que el ratón
   for (const s of G.slots) if (s.doll) {
     const sh = DOLL[s.doll.id].shape;
-    const hit = sh.kind === 'rect' ? Math.abs(x - s.x) < sh.w / 2 + 4 && Math.abs(y - s.y) < sh.h / 2 + 6 : Math.hypot(x - s.x, y - s.y) < Math.max(sh.r, 12) + 5;
+    const hit = sh.kind === 'rect' ? Math.abs(x - s.x) < sh.w / 2 + 4 + pad && Math.abs(y - s.y) < sh.h / 2 + 6 + pad : Math.hypot(x - s.x, y - s.y) < Math.max(sh.r, 12) + 5 + pad;
     if (hit) return s;
   }
   return null;
 }
-let aim = null, drag = null, lastAimStep = -1;
+let aim = null, drag = null, lastAimStep = -1, kickDrag = null;
+const fatFinger = e => e.pointerType === 'touch' || e.pointerType === 'pen';
+function moveBallTo(p) {
+  const b = balls[0]; if (!b) return;
+  G.ballX = clamp(p.x, T.l + 24, T.r - 24);
+  Body.setPosition(b.body, { x:G.ballX, y:clamp(p.y, KICK.y1, KICK.y2) });
+}
+/* El tiro se arma con un "dedo virtual" que arranca sobre el balón: jalar desde el balón o desde
+   cualquier parte de la mesa da el mismo resultado. En el celular el dedo no tapa el balón. */
+function startAim(p, e, doll) {
+  const bp = balls[0].body.position;
+  aim = { x:p.x, y:p.y, ox:bp.x - p.x, oy:bp.y - p.y, sx:e.clientX, sy:e.clientY, t:performance.now(), doll, pid:e.pointerId };
+  lastAimStep = -1;
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+}
 canvas.addEventListener('pointerdown', e => {
   audio();
+  if (fatFinger(e)) setTouch(true);
   if (G.paused) return;                     // tutorial abierto: el juego está en pausa
-  const p = toWorld(e.clientX, e.clientY);
+  if (e.pointerType === 'mouse' && e.button !== 0) return;     // solo el botón principal
+  if (aim || kickDrag) return;              // un segundo dedo no cuenta
+  const p = toWorld(e.clientX, e.clientY), fat = fatFinger(e);
+  hideTooltip();
   if (G.state === 'scoring') { G.fast = true; return; }
   if (G.state === 'aim') {
     const b = balls[0]; if (!b) return;
     const bp = b.body.position;
-    if (Math.hypot(p.x - bp.x, p.y - bp.y) < 40) { aim = { x:p.x, y:p.y }; lastAimStep = -1; canvas.setPointerCapture(e.pointerId); hideTooltip(); }
-    else if (p.y > KICK.y1 - 10 && p.y < KICK.y2 + 10 && p.x > T.l && p.x < T.r) {
-      G.ballX = clamp(p.x, T.l + 24, T.r - 24);
-      Body.setPosition(b.body, { x:G.ballX, y:clamp(p.y, KICK.y1, KICK.y2) });
-      tone(420, 0.05, 'sine', 0.12);
+    if (Math.hypot(p.x - bp.x, p.y - bp.y) < (fat ? 70 : 40)) startAim(p, e, null);
+    else if (p.y > KICK.y1 - 10 && p.y < KICK.y2 + 10 && p.x > T.l && p.x < T.r) {        // zona de saque: mover el balón
+      moveBallTo(p); tone(420, 0.05, 'sine', 0.12);
+      kickDrag = { pid:e.pointerId };
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
     }
+    else if (p.y < KICK.y1 - 10) startAim(p, e, dollAt(p.x, p.y, fat));                     // tiro desde cualquier parte
     return;
   }
   if (G.state === 'shop') {
-    const s = dollAt(p.x, p.y);
+    const s = dollAt(p.x, p.y, fat);
     if (s && G.sellMode) { sellSlot(s); return; }
-    if (s) { startDrag({ kind:'move', from:s }, e); return; }
-    const empty = slotAt(p.x, p.y, 28);
-    if (empty && !empty.doll && G.selectedOffer !== null) buy(G.selectedOffer, { slot: empty });
+    if (s) { startDrag({ kind:'move', from:s }, e); return; }          // al soltar: arrastre o toque
+    const empty = slotAt(p.x, p.y, fat ? 44 : 28);
+    if (empty && !empty.doll) {
+      if (G.selectedOffer !== null) buy(G.selectedOffer, { slot: empty });
+      else if (G.pick) placePick({ slot: empty });
+    } else if (G.selectedOffer !== null || G.pick) clearPick();
   }
 });
 canvas.addEventListener('pointermove', e => {
   const p = toWorld(e.clientX, e.clientY);
+  if (kickDrag) { if (e.pointerId === kickDrag.pid) moveBallTo(p); return; }
   if (aim) {
+    if (e.pointerId !== aim.pid) return;
     aim.x = p.x; aim.y = p.y;
     const ap = aimPower(), step = ap.cancel ? -1 : Math.floor(ap.power * 10);
     if (step !== lastAimStep) { if (step >= 0) SFX.aim(step / 10); if (step === 2 && lastAimStep === -1) SFX.place(); lastAimStep = step; }
     return;
   }
-  if (drag) return;
+  if (drag || e.pointerType !== 'mouse') return;          // el tooltip por "pasar encima" es solo para ratón
   const s = dollAt(p.x, p.y);
   if (s && (G.state === 'aim' || G.state === 'shop')) showTooltip(s, e.clientX, e.clientY); else hideTooltip();
 });
-canvas.addEventListener('pointerup', () => {
-  if (!aim) return;
-  const pw = aimPower(); aim = null;
-  if (pw.cancel) { SFX.place(); return; }          // soltaste dentro del 20%: no hay tiro, puedes mover el balón
+canvas.addEventListener('pointerup', e => {
+  if (kickDrag) { kickDrag = null; return; }
+  if (!aim || e.pointerId !== aim.pid) return;
+  const pw = aimPower(), a = aim; aim = null;
+  const moved = Math.hypot(e.clientX - a.sx, e.clientY - a.sy);
+  if (pw.cancel) {                                    // soltaste dentro del 20%: no hay tiro
+    if (moved < 10 && a.doll && performance.now() - a.t < 450) showTooltipAt(a.doll, 3500);   // fue un toque: qué hace el muñeco
+    else if (moved >= 10) SFX.place();
+    return;
+  }
   if (G.state === 'aim') shoot(pw.dx * pw.speed, pw.dy * pw.speed, pw.power);
 });
-canvas.addEventListener('pointerleave', () => hideTooltip());
+// el sistema se robó el toque (notificación, gesto de iOS…): no se dispara nada
+const cancelAim = () => { aim = null; kickDrag = null; };
+canvas.addEventListener('pointercancel', cancelAim);
+canvas.addEventListener('lostpointercapture', e => {
+  if (aim && e.pointerId === aim.pid) aim = null;
+  if (kickDrag && e.pointerId === kickDrag.pid) kickDrag = null;
+});
+window.addEventListener('blur', cancelAim);
+canvas.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') hideTooltip(); });
 const MAX_DRAG = 170;
 const AIM_MIN = 0.2;     // por debajo del 20% de estiramiento el tiro se cancela al soltar
 function aimPower() {
-  const bp = balls[0].body.position;
-  const dx = bp.x - aim.x, dy = bp.y - aim.y, len = Math.hypot(dx, dy) || 1;
+  const bp = balls[0].body.position, vx = aim.x + aim.ox, vy = aim.y + aim.oy;
+  const dx = bp.x - vx, dy = bp.y - vy, len = Math.hypot(dx, dy) || 1;
   const power = clamp(len / MAX_DRAG, 0, 1), cancel = power < AIM_MIN;
   return { dx: dx / len, dy: dy / len, power, cancel, speed: CFG.physics.maxShot * power, len: Math.min(len, MAX_DRAG) };
+}
+/* Tocar y colocar (sin arrastrar): se toca un muñeco (vitrina, banca o mesa) y luego el destino. */
+function samePick(a, d) { return a && a.kind === d.kind && (a.kind === 'bench' ? a.bench === d.bench : a.from === d.from); }
+function placePick(dst) { const src = G.pick; G.pick = null; if (src) dropOn(src, dst); else renderSide(); }
+function clearPick() { G.pick = null; G.selectedOffer = null; renderSide(); }
+function afterPickChange() {
+  renderSide();
+  if (isCompact() && (G.selectedOffer !== null || G.pick)) closeSheet();      // que se vea la mesa para elegir el hueco
+}
+/* Un toque (sin arrastre) sobre algo de la tienda. info: {kind:'buy', idx} | {kind:'bench', bench} | {kind:'move', from} */
+function tapShop(info) {
+  if (G.state !== 'shop') return;
+  if (info.kind === 'buy') { G.pick = null; G.selectedOffer = G.selectedOffer === info.idx ? null : info.idx; SFX.place(); afterPickChange(); return; }
+  const here = info.kind === 'bench' ? { bench: info.bench } : { slot: info.from };
+  if (G.selectedOffer !== null) { buy(G.selectedOffer, here); return; }
+  if (G.pick && !samePick(G.pick, info)) { placePick(here); return; }
+  if (G.pick) { clearPick(); return; }
+  G.pick = info.kind === 'bench' ? { kind:'bench', bench:info.bench } : { kind:'move', from:info.from };
+  SFX.place(); afterPickChange();
+  if (info.kind === 'move') showTooltipAt(info.from, 3500);
 }
 /* Arrastre en la tienda: carta → mesa/banca, mesa → mesa/banca, banca → mesa/banca.
    Robusto: si el navegador interrumpe el arrastre (pointercancel, arrastre nativo de una imagen,
    la ventana pierde el foco o se suelta fuera), la ficha fantasma SIEMPRE se borra. */
 function startDrag(info, e) {
   endDrag();
-  drag = Object.assign(info, { sx:e.clientX, sy:e.clientY, moved:false, ghost:null, hover:null, pid:e.pointerId });
+  drag = Object.assign(info, { sx:e.clientX, sy:e.clientY, moved:false, ghost:null, hover:null, pid:e.pointerId, lift: fatFinger(e) ? 44 : 0 });
   hideTooltip();
 }
 function endDrag() {
@@ -946,26 +1089,39 @@ window.addEventListener('pointermove', e => {
     const g = document.createElement('img'); g.className = 'ghost'; g.draggable = false; g.src = dollIcon(dd.id, 96);
     document.body.appendChild(g); drag.ghost = g;
   }
-  if (drag.ghost) { drag.ghost.style.left = e.clientX + 'px'; drag.ghost.style.top = e.clientY + 'px'; }
+  if (e.pointerId !== drag.pid) return;
+  // con el dedo, la ficha va un poco más arriba para que se vea (y se apunta con ella)
+  const gy = e.clientY - drag.lift;
+  if (drag.ghost) { drag.ghost.style.left = e.clientX + 'px'; drag.ghost.style.top = gy + 'px'; }
   drag.hover = null;
-  const p = toWorld(e.clientX, e.clientY);
-  if (p.inside) { const s = slotAt(p.x, p.y); if (s && !(drag.kind === 'buy' && s.doll) && s !== drag.from) drag.hover = { slot: s }; }
-  else {
-    const el = document.elementFromPoint(e.clientX, e.clientY), b = el && el.closest('.bslot');
-    if (b) drag.hover = { bench: +b.dataset.b };
+  for (const y of drag.lift ? [gy, e.clientY] : [e.clientY]) {
+    const p = toWorld(e.clientX, y);
+    if (p.inside) { const s = slotAt(p.x, p.y, drag.lift ? 44 : 36); if (s && !(drag.kind === 'buy' && s.doll) && s !== drag.from) { drag.hover = { slot: s }; break; } }
+    else {
+      const el = document.elementFromPoint(e.clientX, y), b = el && el.closest('.bslot');
+      if (b) { drag.hover = { bench: +b.dataset.b }; break; }
+    }
   }
   document.querySelectorAll('.bslot').forEach(x => x.classList.toggle('hover', !!(drag.hover && drag.hover.bench === +x.dataset.b)));
 });
-window.addEventListener('pointerup', () => {
-  if (!drag) return;
+window.addEventListener('pointerup', e => {
+  if (!drag || (e.pointerId !== undefined && e.pointerId !== drag.pid)) return;
   const d = drag; endDrag();
-  if (d.moved && d.hover && G.state === 'shop') dropOn(d, d.hover);
-  else if (!d.moved && d.kind === 'buy') { G.selectedOffer = G.selectedOffer === d.idx ? null : d.idx; renderSide(); }
+  if (G.state !== 'shop') return;
+  if (d.moved) { G.pick = null; G.selectedOffer = null; if (d.hover) dropOn(d, d.hover); else renderSide(); }
+  else tapShop(d);
 });
 window.addEventListener('pointercancel', endDrag);
 window.addEventListener('blur', endDrag);
 document.addEventListener('visibilitychange', () => { if (document.hidden) endDrag(); });
 document.addEventListener('dragstart', e => e.preventDefault());   // nada de arrastre nativo de imágenes
+['touchend', 'click', 'keydown'].forEach(ev => window.addEventListener(ev, () => audio(), { capture:true, passive:true }));
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { cancelAim(); return; }
+  if (typeof AC !== 'undefined' && AC && AC.state !== 'running') AC.resume().catch(() => {});
+});
+MQ_COARSE.addEventListener && MQ_COARSE.addEventListener('change', e => setTouch(e.matches));
+MQ_COMPACT.addEventListener && MQ_COMPACT.addEventListener('change', () => { closeSheet(); renderSide(); });
 
 /* ===================== RAYCAST DE LA GUÍA (solo hasta el primer rebote) ===================== */
 const probe = Bodies.circle(0, 0, BALL_R);
@@ -991,12 +1147,16 @@ function raycast(ox, oy, dx, dy) {
 function fitCanvas() {
   const st = $('stage').getBoundingClientRect();
   const s = Math.min(st.width / CW, st.height / CH);
-  const w = Math.floor(CW * s), h = Math.floor(CH * s), dpr = window.devicePixelRatio || 1;
+  if (!(s > 0)) return;
+  const w = Math.floor(CW * s), h = Math.floor(CH * s), dpr = Math.min(2, window.devicePixelRatio || 1);   // >2 no se nota y cuesta batería
   canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
   canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
   VIEW_K = canvas.width / CW; tableDirty = true;
+  TXT_K = clamp(0.8 / s, 1, 1.45);
 }
-window.addEventListener('resize', fitCanvas);
+window.addEventListener('resize', () => { fitCanvas(); fitBoardText(); });
+// el espacio de la mesa cambia sin que cambie la ventana (barra del tiro, hoja, debug): se reajusta solo
+if (window.ResizeObserver) new ResizeObserver(() => fitCanvas()).observe($('stage'));
 
 /* La mesa estática se pinta una vez en una capa aparte (se repinta al cambiar tamaño, rivales o modo daltónico). */
 let tableLayer = null, tableDirty = true;
@@ -1095,10 +1255,11 @@ function drawSlots(tm) {
     if (s.doll && !s.doll.expelled) continue;
     if (s.doll) continue;
     const hl = drag && drag.hover && drag.hover.slot === s, shop = G.state === 'shop';
+    const waiting = shop && (G.selectedOffer !== null || G.pick);       // hay algo escogido: los huecos llaman
     ctx.setLineDash([4, 4]);
-    ctx.strokeStyle = hl ? PAL.crema : (shop ? `rgba(244,234,213,${0.45 + 0.25 * Math.sin(tm / 200)})` : 'rgba(244,234,213,0.18)');
-    ctx.lineWidth = hl ? 4 : 2;
-    circle(ctx, s.x, s.y, hl ? 20 : 13); ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = hl ? PAL.crema : waiting ? `rgba(244,234,213,${0.7 + 0.3 * Math.sin(tm / 120)})` : (shop ? `rgba(244,234,213,${0.45 + 0.25 * Math.sin(tm / 200)})` : 'rgba(244,234,213,0.18)');
+    ctx.lineWidth = hl ? 4 : waiting ? 3 : 2;
+    circle(ctx, s.x, s.y, hl ? (drag.lift ? 26 : 20) : waiting ? 16 + 2 * Math.sin(tm / 120) : 13); ctx.stroke(); ctx.setLineDash([]);
   }
 }
 function drawDoll(s, tm) {
@@ -1107,6 +1268,9 @@ function drawDoll(s, tm) {
   const flash = age < 0.6 ? Math.exp(-age * 10) * (OPT.reduceFlashes ? 0.35 : 1) : 0;
   const lifted = drag && drag.kind === 'move' && drag.moved && drag.from === s;
   ctx.save(); ctx.translate(s.x, s.y);
+  if (G.state === 'shop' && G.pick && G.pick.kind === 'move' && G.pick.from === s) {     // escogido para moverlo
+    ctx.setLineDash([5, 4]); circle(ctx, 0, 0, 28 + 2 * Math.sin(tm / 120)); ctx.strokeStyle = PAL.crema; ctx.lineWidth = 3; ctx.stroke(); ctx.setLineDash([]);
+  }
   if (d.expelled) {                                      // Rambos expulsado: fuera de la mesa, tarjeta roja visible
     drawFigure(ctx, d.id, { tm, alpha: 0.22 });
     drawCard(ctx, 12, -12, 18, PAL.rojo, 0.25);
@@ -1119,11 +1283,31 @@ function drawDoll(s, tm) {
     const g = SC.garraState(G.slots, CFG, G.shotsLeft, G.total, G.quota);
     if (g && g.active) { circle(ctx, 0, 0, 26 + 3 * Math.sin(tm / 150)); ctx.fillStyle = 'rgba(244,234,213,0.35)'; ctx.fill(); }
   }
-  drawFigure(ctx, d.id, { tm, flash, dim: d.muted, alpha: lifted ? 0.35 : (d.id === 'fantasma' ? 0.8 + 0.15 * Math.sin(tm / 250) : 1) });
+  // El Veterano "cargado": sus últimos tiros del partido
+  const vetOn = d.id === 'veterano' && !d.muted && (G.state === 'aim' ? SC.veteranoWindow(CFG, G.shotsLeft) : shot && SC.veteranoWindow(CFG, shot.shotsLeft));
+  if (vetOn) {
+    circle(ctx, 0, 0, 25 + 3 * Math.sin(tm / 150)); ctx.fillStyle = 'rgba(244,234,213,0.35)'; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = multColor(); ctx.setLineDash([5, 4]); ctx.lineDashOffset = -tm / 40; ctx.stroke(); ctx.setLineDash([]);
+  }
+  drawFigure(ctx, d.id, { tm, flash, dim: d.muted, turn: lookAt(d, s.x, s.y, tm) + k * 0.35,
+    alpha: lifted ? 0.35 : (d.id === 'fantasma' ? 0.8 + 0.15 * Math.sin(tm / 250) : 1) });
   ctx.restore();
   // estado "cargado" (manual: icono pequeño cuando crece o está marcado)
   if (d.muted) { drawWhistle(ctx, s.x + 12, s.y - 18, 12); drawCard(ctx, s.x - 14, s.y - 18, 12, PAL.amarillo, -0.2); }
-  if (d.id === 'veterano' || d.id === 'ninamal') drawPtsChip(ctx, String(d.value), s.x, s.y - 30, 10);
+  if (d.id === 'ninamal') drawPtsChip(ctx, String(d.value), s.x, s.y - 30, 10);
+  if (d.captain) {                                   // cinta de capitán
+    const R = (DOLL[d.id].shape.r || 12) + 2;
+    ctx.beginPath(); ctx.arc(s.x, s.y, R, Math.PI * 0.55, Math.PI * 0.95); ctx.lineWidth = 6; ctx.strokeStyle = PAL.tinta; ctx.stroke();
+    ctx.lineWidth = 4; ctx.strokeStyle = PAL.oro; ctx.stroke();
+    plateText(ctx, 'C', s.x - R * 0.85, s.y + R * 0.75, 9, PAL.oro);
+  }
+  if (d.id === 'costurera' && SC.isActive(d)) {       // hilo entre los vecinos si son de la misma familia
+    const a = G.slots.find(x => x.rod === s.rod && x.i === s.i - 1), b = G.slots.find(x => x.rod === s.rod && x.i === s.i + 1);
+    if (a && b && a.doll && b.doll && DOLL[a.doll.id].family === DOLL[b.doll.id].family) {
+      ctx.setLineDash([2, 5]); ctx.strokeStyle = 'rgba(244,234,213,0.7)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y - 6); ctx.quadraticCurveTo(s.x, s.y - 34, b.x, b.y - 6); ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
   if (d.id === 'diez') drawMultStamp(ctx, '+' + d.value, s.x, s.y - 30, 10);
   if (d.id === 'rambos' && d.rojas > 0) for (let i = 0; i < d.rojas; i++) drawCard(ctx, s.x - 8 + i * 8, s.y - 28, 10, PAL.amarillo, 0.15);
   if (d.id === 'mano' && G.manoUsed) { ctx.fillStyle = 'rgba(26,20,35,0.5)'; circle(ctx, s.x, s.y, 18); ctx.fill(); }
@@ -1146,14 +1330,29 @@ function drawLlaveLinks(tm) {
     ctx.beginPath(); ctx.moveTo(l.x1, l.y1); ctx.lineTo(l.x2, l.y2); ctx.stroke();
   }
 }
+/* Los muñecos miran al balón cuando pasa cerca; si no, se mecen un poquito (cada uno a su ritmo). */
+function lookAt(who, x, y, tm) {
+  let target = Math.sin(tm / 900 + (who.uid || who.seed || 0) * 1.7) * 0.05;
+  let best = 200;
+  for (const b of balls) {
+    if (!b.alive) continue;
+    const dx = b.body.position.x - x, dy = b.body.position.y - y, dist = Math.hypot(dx, dy);
+    if (dist < best) { best = dist; target = clamp(Math.atan2(dx, -dy), -0.55, 0.55); }
+  }
+  who.face = (who.face || 0) + (target - (who.face || 0)) * 0.12;
+  return who.face;
+}
 function drawRivals(tm) {
   for (const r of rivals) {
     const b = r.body;
     ctx.save(); ctx.translate(b.position.x, b.position.y);
+    const age0 = (tm - (r.hitT || -9999)) / 1000, kick = age0 < 1 ? Math.exp(-age0 * 9) * Math.cos(age0 * 42) * 0.35 : 0;
+    if (r.seed === undefined) r.seed = rivals.indexOf(r) + 7;
+    const turn = lookAt(r, b.position.x, b.position.y, tm) + kick;
     if (r.role === 'keeper') {
       const w = b.bounds.max.x - b.bounds.min.x, h = b.bounds.max.y - b.bounds.min.y;
-      drawFigure(ctx, null, { rival:true, shape:{ kind:'rect', w, h } });
-    } else drawFigure(ctx, null, { rival:true, shape:{ kind:'circle', r: CFG.rivals.defR } });
+      drawFigure(ctx, null, { rival:true, shape:{ kind:'rect', w, h }, head:'gorra', turn: turn * 0.4 });
+    } else drawFigure(ctx, null, { rival:true, shape:{ kind:'circle', r: CFG.rivals.defR }, head: r.seed % 2 ? 'rapado' : 'despeinado', turn });
     const age = (tm - (r.hitT || -9999)) / 1000;
     if (age < 0.3) { circle(ctx, 0, 0, 18 + 20 * age); ctx.strokeStyle = `rgba(244,234,213,${1 - age / 0.3})`; ctx.lineWidth = 3; ctx.stroke(); }
     ctx.restore();
@@ -1188,7 +1387,7 @@ function drawAim(tm) {
   if (!aim) {
     const pulse = 0.5 + 0.5 * Math.sin(tm / 250);
     circle(ctx, bp.x, bp.y, BALL_R + 7 + 4 * pulse); ctx.strokeStyle = `rgba(244,234,213,${0.3 + 0.4 * pulse})`; ctx.lineWidth = 3; ctx.stroke();
-    if (!G.hasShot && !G.paused) plateText(ctx, t('table.hint'), CW / 2, KICK.y2 + 32, 12, PAL.crema, FONT_TXT);
+    if (!G.hasShot && !G.paused) plateText(ctx, t('table.hint'), CW / 2, KICK.y2 + 32, 12 * TXT_K, PAL.crema, FONT_TXT);
     return;
   }
   const a = aimPower(), ex = bp.x - a.dx * a.len, ey = bp.y - a.dy * a.len;
@@ -1198,7 +1397,7 @@ function drawAim(tm) {
   if (a.cancel) {
     ctx.strokeStyle = 'rgba(244,234,213,0.6)'; ctx.lineWidth = 4; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(bp.x, bp.y); ctx.lineTo(ex, ey); ctx.stroke(); ctx.lineCap = 'butt';
-    plateText(ctx, t('aim.cancel'), bp.x, bp.y + 50, 11, PAL.crema, FONT_TXT);
+    plateText(ctx, t('aim.cancel'), bp.x, bp.y + 50, 11 * TXT_K, PAL.crema, FONT_TXT);
     return;
   }
   // goma del tirador: tinta con alma crema
@@ -1212,7 +1411,7 @@ function drawAim(tm) {
   ctx.strokeStyle = PAL.tinta; ctx.lineWidth = 8; ctx.stroke(); ctx.strokeStyle = PAL.crema; ctx.lineWidth = 4; ctx.stroke();
   // guía SOLO hasta el primer rebote (con el imán, hasta el segundo; con La Niebla, nada)
   const iman = !!G.nextShot.iman;
-  if (G.boss === 'niebla' && !iman) { plateText(ctx, Math.round(a.power * 100) + '%', bp.x, bp.y + 38, 11, PAL.crema); return; }
+  if (G.boss === 'niebla' && !iman) { plateText(ctx, Math.round(a.power * 100) + '%', bp.x, bp.y + 38, 11 * TXT_K, PAL.crema); return; }
   const hit = raycast(bp.x, bp.y, a.dx, a.dy), dist = Math.hypot(hit.x - bp.x, hit.y - bp.y);
   const off = (tm / 30) % 14;
   const dots = (x0, y0, ux, uy, len, start) => { for (let d = start + off; d < len; d += 14) { circle(ctx, x0 + ux * d, y0 + uy * d, 3.2); inkFill(ctx, PAL.crema, 1.5); } };
@@ -1298,7 +1497,7 @@ function drawFx(tm, dt) {
     } else {
       if (p.w === undefined) {
         ctx.font = `${p.size}px ${FONT_NUM}`;
-        p.w = ctx.measureText(p.text).width + p.size * (p.kind === 'text' ? 1.2 : 2.2); p.h = p.size * 1.5; p.off = 0;
+        p.w = ctx.measureText(p.text).width + p.size * (p.kind === 'text' ? 1.2 : 2.2) + (p.tag ? p.size * 2 : 0); p.h = p.size * (p.tag ? 2 : 1.5); p.off = 0;
       }
       let r = { x: x - p.w / 2, y: y - p.off - p.h / 2, w: p.w, h: p.h }, tries = 0;
       while (hitsAny(r) && tries++ < 12) { p.off += p.h * 0.5; r.y = y - p.off - p.h / 2; }
@@ -1306,7 +1505,7 @@ function drawFx(tm, dt) {
       y -= p.off; placed.push(r);
     }
     ctx.save(); ctx.translate(x, y); ctx.scale(pop, pop); ctx.globalAlpha = a > 0.8 ? (1 - a) / 0.2 : 1;
-    if (p.kind === 'pts') drawPtsChip(ctx, p.text.replace(/^\+/, ''), 0, 0, p.size);
+    if (p.kind === 'pts') { drawPtsChip(ctx, p.text.replace(/^\+/, ''), 0, 0, p.size); if (p.tag) plateText(ctx, p.tag, p.w / 2 + p.size * 0.2, -p.size * 0.7, p.size * 0.72, PAL.crema); }
     else if (p.kind === 'mult') drawMultStamp(ctx, p.text, 0, 0, p.size);
     else if (p.kind === 'plata') drawPlataChip(ctx, p.text.replace(/^\+/, ''), 0, 0, p.size);
     else plateText(ctx, p.text, 0, 0, p.size, p.color);
@@ -1373,9 +1572,16 @@ function frame(tm) {
   requestAnimationFrame(frame);
 }
 
+/* El tutorial se guarda como "visto" en el navegador. Cuando cambia su contenido se sube
+   TUTORIAL_VERSION y a todos les vuelve a salir una vez. */
+const TUTORIAL_VERSION = 3;
 function startGame() {
+  if (PROFILE.tutorialVersion !== TUTORIAL_VERSION) {
+    PROFILE.tutorialVersion = TUTORIAL_VERSION; PROFILE.tutorialDone = false; PROFILE.coachSeen = {}; saveProfile();
+  }
   $('tPtsLbl').textContent = t('tally.points'); $('tMultLbl').textContent = t('tally.mult');
   $('tFinalLbl').textContent = t('tally.final'); $('tSkip').textContent = t('tally.skip');
+  $('rotTitle').textContent = t('rotate.title'); $('rotText').textContent = t('rotate.text');
   applyOptions();
   if (document.fonts) document.fonts.ready.then(() => { tableDirty = true; for (const k in iconCache) delete iconCache[k]; renderSide(); });
   buildDebug();

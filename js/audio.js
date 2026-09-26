@@ -166,6 +166,16 @@ const SFX = {
       [[392, 0], [523, 0.1], [659, 0.2], [784, 0.3]].forEach(([f, d]) => { osc(lp, t + d, f, 0.45, 'sawtooth', 0.08, null, 0.02); osc(lp, t + d, f * 1.005, 0.45, 'sawtooth', 0.06, null, 0.02); });
     });
   },
+  /* La reja metálica de la tienda: traqueteo mientras baja y un CLAC seco al tocar el piso */
+  reja(dur = 0.35) {
+    voice(3, dur + 0.5, (g, t) => {
+      const n = Math.max(3, Math.round(dur / 0.035));
+      for (let k = 0; k < n; k++) nz(g, t + k * (dur / n), 0.03, 0.12, 2200 + (k % 3) * 400, 'bandpass', 6);
+      const tc = t + dur;
+      nz(g, tc, 0.08, 0.5, 1200, 'bandpass', 2);
+      osc(g, tc, 880, 0.35, 'square', 0.06); osc(g, tc, 1320, 0.28, 'triangle', 0.05); osc(g, tc, 110, 0.18, 'sine', 0.35, 50);
+    });
+  },
   whistle() { voice(3, 0.45, (g, t) => { osc(g, t, 2350, 0.35, 'sine', 0.1); osc(g, t, 2480, 0.35, 'sine', 0.07); }); },
 };
 

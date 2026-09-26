@@ -9,6 +9,8 @@ const LOG = (() => {
   const KEY = 'golinLog_v1', MAX_RUNS = 60;
   let runs = [];
   try { runs = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { runs = []; }
+  if (!Array.isArray(runs)) runs = [];
+  runs = runs.filter(r => r && typeof r === 'object' && Array.isArray(r.matches)).slice(-MAX_RUNS);   // basura fuera
   let run = null, match = null;
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(runs.slice(-MAX_RUNS))); } catch (e) {} };
   const stamp = () => Math.round(performance.now());

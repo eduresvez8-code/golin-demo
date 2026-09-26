@@ -13,14 +13,17 @@
 }
 body.cb{ --mult:#FF3D8B; }     /* modo daltónico: rojo mult → magenta neón */
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;color:var(--crema);font-family:var(--fTxt);overflow:hidden;user-select:none;-webkit-user-select:none;
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;touch-action:manipulation}
+*{-webkit-tap-highlight-color:transparent}
+img,canvas{-webkit-touch-callout:none}
+html,body{margin:0;height:100%;overscroll-behavior:none;color:var(--crema);font-family:var(--fTxt);overflow:hidden;user-select:none;-webkit-user-select:none;
   font-size:calc(16px * var(--ts))}
 body{background:var(--noche);
   background-image:radial-gradient(rgba(255,255,255,.035) 1px,transparent 1px),radial-gradient(rgba(0,0,0,.08) 1px,transparent 1px);
   background-size:7px 7px,11px 11px;background-position:0 0,3px 5px}
 button{font:inherit;color:inherit}
 .num,.cell b,.chip,#tPts,#tMult,#tFinal{font-family:var(--fNum);font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
-#app{display:flex;height:100vh;gap:12px;padding:12px}
+#app{display:flex;height:100vh;height:100dvh;gap:12px;padding:12px}
 .hidden{display:none!important}
 
 /* ---------- centro ---------- */
@@ -61,7 +64,7 @@ canvas{display:block;touch-action:none;border-radius:20px;box-shadow:8px 10px 0 
 
 /* ---------- conteo del tiro (escalera de celebración) ---------- */
 #tally{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.85);opacity:0;pointer-events:none;transition:opacity .15s,transform .15s;
-  background:var(--tinta);border:4px solid var(--crema);border-radius:18px;padding:14px 22px;min-width:330px;z-index:5;box-shadow:8px 8px 0 var(--maderaOsc)}
+  background:var(--tinta);border:4px solid var(--crema);border-radius:18px;padding:14px 22px;min-width:min(330px,90%);z-index:5;box-shadow:8px 8px 0 var(--maderaOsc)}
 #tally.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
 .trow{display:flex;justify-content:space-between;align-items:center;font-family:var(--fNum);font-size:1.15rem;margin:5px 0;gap:20px}
 .trow .v{padding:2px 14px;border-radius:999px;color:var(--tinta);border:3px solid var(--crema)}
@@ -87,7 +90,7 @@ canvas{display:block;touch-action:none;border-radius:20px;box-shadow:8px 10px 0 
 
 /* ---------- paneles ---------- */
 #panel{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:var(--tinta);border:4px solid var(--crema);
-  border-radius:18px;padding:22px 26px;min-width:360px;max-width:92%;z-index:6;text-align:center;box-shadow:8px 8px 0 var(--maderaOsc)}
+  border-radius:18px;padding:22px 26px;min-width:min(360px,92%);max-width:92%;max-height:96%;overflow:auto;z-index:6;text-align:center;box-shadow:8px 8px 0 var(--maderaOsc)}
 #panel h1{margin:0 0 10px;font-family:var(--fNum);font-weight:400;font-size:1.9rem;line-height:1.1;text-shadow:3px 3px 0 var(--noche)}
 #panel h1.bad{color:var(--crema);opacity:.9}
 #panel .rw{display:flex;justify-content:space-between;align-items:center;font-size:1.05rem;padding:4px 0;gap:30px}
@@ -128,7 +131,7 @@ canvas{display:block;touch-action:none;border-radius:20px;box-shadow:8px 10px 0 
 .vitrina{display:flex;flex-direction:column;gap:8px}
 .card{display:flex;gap:10px;background:var(--crema);color:var(--tinta);border:4px solid var(--tinta);border-radius:12px;padding:8px;
   cursor:grab;touch-action:none;transition:transform .1s;box-shadow:4px 4px 0 var(--maderaOsc);position:relative}
-.card:hover{transform:translateY(-2px) rotate(-.5deg)}
+@media (hover:hover){.card:hover{transform:translateY(-2px) rotate(-.5deg)}}
 .card.sel{outline:4px solid var(--crema);outline-offset:2px}
 .card.cant .portrait{filter:grayscale(.6)}
 .card.sold{opacity:.45;cursor:default;justify-content:center;font-family:var(--fNum);min-height:60px;align-items:center}
@@ -165,7 +168,7 @@ canvas{display:block;touch-action:none;border-radius:20px;box-shadow:8px 10px 0 
 .red{color:#ff8a92;font-weight:700}
 .btn{background:var(--crema);color:var(--tinta);border:3px solid var(--tinta);border-radius:10px;padding:9px 12px;font-family:var(--fNum);font-size:.85rem;cursor:pointer;
   box-shadow:3px 3px 0 var(--maderaOsc)}
-.btn:hover{transform:translateY(-1px)}
+@media (hover:hover){.btn:hover{transform:translateY(-1px)}}
 .btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--maderaOsc)}
 .btn:disabled{opacity:.5}
 .btn.on{background:var(--tinta);color:var(--crema);border-color:var(--crema)}
@@ -197,13 +200,6 @@ canvas{display:block;touch-action:none;border-radius:20px;box-shadow:8px 10px 0 
 #debug textarea{width:100%;height:90px;background:#1b2230;color:#eee;border:1px solid #444;font-size:10px}
 #dbgToggle{position:fixed;left:14px;bottom:14px;z-index:40;font-size:.75rem;padding:6px 10px;opacity:.8}
 
-@media (max-width:1000px){
-  html,body{overflow:auto}
-  #app{flex-direction:column;height:auto;min-height:100vh}
-  #side,#debug{width:auto}
-  #stage{height:88vh;flex:none}
-  #board{flex-wrap:wrap}
-}
 #debug details{margin:4px 0}
 #debug summary{cursor:pointer;color:#9fe;font-size:11px;padding:3px 0}
 #debug details.sub{margin-left:10px}
@@ -214,7 +210,7 @@ canvas{display:block;touch-action:none;border-radius:20px;box-shadow:8px 10px 0 
 .counter{display:flex;gap:8px}
 .item{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--crema);color:var(--tinta);border:4px solid var(--tinta);
   border-radius:12px;padding:8px 6px;cursor:pointer;box-shadow:4px 4px 0 var(--maderaOsc);position:relative;font-family:var(--fTxt)}
-.item:hover{transform:translateY(-2px)}
+@media (hover:hover){.item:hover{transform:translateY(-2px)}}
 .item.cant{opacity:.6}
 .item.sold{opacity:.45;justify-content:center;font-family:var(--fNum);font-size:.8rem;cursor:default}
 .iicon{font-size:1.6rem}
@@ -260,3 +256,157 @@ canvas{display:block;touch-action:none;border-radius:20px;box-shadow:8px 10px 0 
 #tour .tbtns{display:flex;justify-content:space-between;align-items:center}
 #tour .tskip{background:none;border:none;color:var(--tinta);opacity:.65;text-decoration:underline;cursor:pointer;font-size:.85rem;font-family:var(--fTxt)}
 #tour .tnext{font-size:.95rem;padding:9px 16px}
+.legendPick{display:flex;flex-direction:column;gap:10px}
+.legendCard.pick{cursor:pointer;border-width:4px;font:inherit;text-align:left;width:100%}
+@media (hover:hover){.legendCard.pick:hover{transform:translateY(-2px)}}
+.bossName.captain{background:var(--oroOsc)}
+
+/* ---------- entrada a la Tienda de Don Chucho ---------- */
+#shutter{position:fixed;inset:0;z-index:85;overflow:hidden;pointer-events:auto;cursor:default}
+#side.reveal > *, #side.reveal .card, #side.reveal .item{animation:cardIn .32s cubic-bezier(.3,1.4,.5,1) both;
+  animation-delay:calc(var(--T) * .58 + var(--i, 0) * 50ms)}
+@keyframes cardIn{from{opacity:0;transform:translateY(18px) scale(.94)}to{opacity:1;transform:none}}
+.signRow{display:flex;align-items:flex-end;gap:8px;margin-bottom:8px}
+.signRow .sign{flex:1;margin-bottom:0}
+.chuchoMini{width:70px;height:auto;flex:none;filter:drop-shadow(3px 3px 0 rgba(26,20,35,.45))}
+#shutter canvas{position:absolute;inset:0;display:block}
+/* debug: sin estilos en línea (la CSP los bloquea) */
+.dbgHead{display:flex;justify-content:space-between;align-items:center;gap:8px}
+#debug .dJump{width:50px}
+#dLog{white-space:pre-wrap;font-size:10px;margin:2px 0}
+.loadError{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:100;background:var(--crema);color:var(--tinta);
+  border:4px solid var(--tinta);border-radius:12px;padding:12px 18px;font-weight:700}
+
+/* =====================================================================
+   CELULAR Y TABLETA (≤ 900 px de ancho)
+   Todo cabe en una pantalla, sin scroll: marcador compacto arriba, la mesa
+   ocupa lo que sobra y abajo una barra (#dock). El panel lateral se vuelve una
+   hoja que sube desde abajo (#side + body.sheet-open).
+   ===================================================================== */
+#dock,.sheetGrip,#sheetBack,#rotate{display:none}
+.dockB .bname{display:none}
+@media (min-width:901px) and (max-width:1150px){ #side{width:300px} }
+@media (max-width:900px){
+  html,body{overflow:hidden}
+  body{position:fixed;inset:0}
+  #app{flex-direction:column;height:100%;gap:6px;
+    padding:calc(6px + env(safe-area-inset-top)) calc(8px + env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) calc(8px + env(safe-area-inset-left))}
+  #center{gap:6px;min-height:0}
+  /* marcador en 2 filas: [partido | meta | ?] [tiros | plata | vidas | ⚙] */
+  #board{display:grid;grid-template-columns:minmax(66px,auto) 1fr 1fr 42px;gap:5px}
+  #board .cell{min-width:0;overflow:hidden;padding:3px 6px;border-width:2px;border-radius:9px;box-shadow:2px 2px 0 var(--maderaOsc)}
+  #board .cell small{font-size:.5rem;letter-spacing:.04em;line-height:1.1;text-align:center}
+  #board .cell b{font-size:1rem}
+  #board .cell:nth-child(1){grid-area:1/1}
+  #board .cell.big{grid-area:1/2/2/4;padding:3px 8px}
+  #board .cell.big b{font-size:1.15rem}
+  #board .cell:nth-child(3){grid-area:2/1}
+  #board .cell:nth-child(3) b{font-size:.8rem;letter-spacing:-.05em}
+  #board .cell.plata{grid-area:2/2}
+  #board .cell:nth-child(5){grid-area:2/3}
+  #board .cell:nth-child(5) b{font-size:.9rem}
+  #board #bHelp{grid-area:1/4}
+  #board #bOpt{grid-area:2/4}
+  #board .btn.opt{min-width:0;width:100%;padding:0;font-size:1.05rem;border-width:2px;box-shadow:2px 2px 0 var(--maderaOsc)}
+  #board .bar{height:6px;margin-top:2px;border-width:1.5px}
+  .cell small.sub{font-size:.58rem}
+  .bossTag{font-size:.5rem;padding:0 3px;border-width:1.5px}
+  /* barra del tiro: una sola línea que se desliza de lado si no cabe */
+  #shotbar{flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;min-height:36px;gap:6px;scrollbar-width:none;padding:2px 2px 4px}
+  #shotbar::-webkit-scrollbar{display:none}
+  #shotbar > :first-child{margin-left:auto} #shotbar > :last-child{margin-right:auto}
+  #shotbar > *{flex:none;white-space:nowrap}
+  #shotbar .lbl{font-size:.62rem} #shotbar .sep{font-size:1.1rem}
+  .chip{font-size:1rem;padding:2px 10px;border-width:2px;box-shadow:2px 2px 0 var(--tinta)}
+  .chip.small{font-size:.72rem;padding:3px 8px}
+  .btn.pocket,.btn.skip{padding:6px 10px;font-size:.75rem}
+  canvas{border-radius:14px;box-shadow:4px 6px 0 #0006}
+  /* conteo y paneles, a la medida del celular */
+  #tally{padding:10px 14px;border-width:3px;min-width:min(300px,88vw)}
+  .trow{font-size:1rem;gap:12px}
+  #tFinal{font-size:2.6rem} #tally.lvl1 #tFinal,#tally.lvl2 #tFinal{font-size:2rem}
+  #tally.lvl4 #tFinal{font-size:3rem} #tally.lvl5 #tFinal{font-size:3.5rem}
+  #panel{position:fixed;z-index:40;min-width:0;width:min(420px,calc(100vw - 24px));max-width:none;max-height:calc(100% - 24px);padding:16px 16px 18px;border-width:3px}
+  #panel h1{font-size:1.5rem}
+  #panel .rw{gap:12px;font-size:1rem}
+  .bossName{font-size:2rem!important}
+  .legendCard{gap:10px;padding:8px} .legendCard img{width:72px;height:72px}
+  #tooltip{max-width:min(280px,82vw)}
+  #options .box{max-height:calc(100% - 24px);overflow:auto;padding:14px 16px}
+  #options label{font-size:1rem;margin:8px 0}
+  #options input[type=range]{width:130px}
+  #options input[type=checkbox]{width:22px;height:22px;flex:none}
+  #debug .dbtn{font-size:13px;padding:7px 9px}
+  #debug input[type=number],#debug select{font-size:14px;padding:4px}
+  #dbgToggle{display:none}
+  #debug{position:fixed;inset:0;width:auto;z-index:95;border-radius:0;padding-top:calc(10px + env(safe-area-inset-top));font-size:13px}
+  /* barra de abajo */
+  #dock{display:flex;align-items:center;gap:6px;min-height:50px;flex:none}
+  #dock .btn{padding:9px 10px;font-size:.78rem;white-space:nowrap;box-shadow:2px 2px 0 var(--maderaOsc)}
+  #dock .btn.grow{flex:1}
+  #dock .btn.go{background:var(--cancha);color:var(--crema);border-color:var(--crema)}
+  #dock .dockPlata{font-family:var(--fNum);color:var(--plata);font-size:1.05rem;white-space:nowrap;padding:0 2px}
+  #dock .dockBench{display:flex;gap:4px;flex:none}
+  #dock .dockBench .lbl{font-family:var(--fNum);font-size:.5rem;color:var(--muted);writing-mode:vertical-rl;transform:rotate(180deg);align-self:center}
+  .bslot.dockB{flex:none;width:44px;height:44px;min-height:0;padding:2px;border-width:2px;border-color:var(--crema);border-radius:9px}
+  .bslot.dockB img{width:38px;height:38px}
+  .bslot.dockB.picked{outline:3px solid var(--crema);outline-offset:1px;animation:garra .6s ease-in-out infinite alternate}
+  #dock .dockMsg{flex:1;min-width:0;display:flex;align-items:center;gap:6px;font-weight:700;font-size:.85rem;line-height:1.2}
+  #dock .dockMsg img{width:36px;height:36px;flex:none}
+  /* el panel lateral como hoja que sube desde abajo */
+  #side{position:fixed;left:0;right:0;bottom:0;width:auto;max-height:74%;z-index:30;border-radius:18px 18px 0 0;border-bottom:none;
+    padding:0 14px calc(16px + env(safe-area-inset-bottom));transform:translateY(105%);transition:transform .28s cubic-bezier(.3,1.1,.5,1);
+    overscroll-behavior:contain;touch-action:pan-y;visibility:hidden}
+  body.sheet-open #side{transform:none;visibility:visible;transition:transform .28s cubic-bezier(.3,1.1,.5,1),visibility 0s 0s}
+  #side{transition:transform .24s ease-in,visibility 0s .24s}
+  .card{touch-action:pan-y;cursor:pointer}
+  #debug .dKey{display:none}
+  #mToast{position:fixed;left:50%;bottom:calc(70px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:45;background:var(--crema);color:var(--tinta);
+    border:3px solid var(--tinta);border-radius:10px;padding:6px 12px;font-weight:700;font-size:.9rem;box-shadow:3px 3px 0 var(--maderaOsc);opacity:0;pointer-events:none;max-width:90vw;text-align:center}
+  #mToast.show{animation:toast 2.2s}
+  #side.shop{outline:none}
+  #sheetBack{position:fixed;inset:0;z-index:29;background:rgba(10,14,12,.45)}
+  body.sheet-open #sheetBack{display:block}
+  .sheetGrip{display:flex;flex-direction:column;align-items:center;gap:4px;position:sticky;top:0;z-index:2;width:calc(100% + 28px);margin:0 -14px 8px;
+    padding:8px 0 8px;background:inherit;border:none;border-bottom:2px dashed rgba(244,234,213,.25);font-family:var(--fNum);font-size:.72rem;cursor:pointer;color:inherit}
+  #side.shop .sheetGrip{background:var(--madera);border-bottom-color:rgba(26,20,35,.3);color:var(--tinta)}
+  .sheetGrip::before{content:'';width:44px;height:5px;border-radius:3px;background:currentColor;opacity:.5}
+  .card .portrait{width:56px;height:56px}
+  .chuchoMini{width:52px}
+  .sign{padding:6px}
+  .sign span{font-size:1.05rem}
+  .tendero{font-size:.95rem;margin:2px 2px 4px}
+  .plataBig{font-size:1.25rem;padding:1px 12px}
+  #side h2{font-size:1.1rem}
+  .help{font-size:.92rem}
+  .mini-btn{padding:6px 9px;font-size:.75rem}
+  .btns .btn{padding:10px 8px;font-size:.8rem}
+  #tour .tcard{width:min(320px,calc(100vw - 24px));padding:10px 12px}
+  #tour .ttitle{font-size:1.15rem}
+  #tour .ttext{font-size:.92rem;margin:8px 0 10px}
+}
+@media (max-width:900px) and (max-height:700px){
+  #board .cell small.sub{display:none}
+  #tour .tdemo{width:78%;margin:0 auto}
+}
+/* celular acostado: se pide girarlo (la mesa es vertical) */
+@media (orientation:landscape) and (max-height:500px) and (pointer:coarse){
+  #rotate{display:grid;place-items:center;position:fixed;inset:0;z-index:300;background:var(--noche);text-align:center;padding:24px}
+  #rotate h2{font-family:var(--fNum);font-weight:400;margin:8px 0}
+  #rotate p{margin:0;opacity:.85}
+  #rotate .rphone{width:40px;height:68px;margin:0 auto 6px;border:5px solid var(--crema);border-radius:10px;box-shadow:3px 3px 0 var(--maderaOsc);animation:rot 1.6s ease-in-out infinite}
+  @keyframes rot{0%,30%{transform:rotate(90deg)}60%,100%{transform:rotate(0)}}
+}
+/* tableta vertical: lo mismo que el celular, con más aire */
+@media (min-width:600px) and (max-width:900px){
+  #board{grid-template-columns:minmax(110px,auto) 1fr 1fr 56px;gap:8px}
+  #board .cell small{font-size:.66rem}
+  #board .cell b,#board .cell:nth-child(3) b,#board .cell:nth-child(5) b{font-size:1.35rem}
+  #board .cell.big b{font-size:1.6rem}
+  #board .btn.opt{font-size:1.4rem}
+  .chip.small{font-size:.85rem}
+  #dock{min-height:60px}
+  #dock .btn{font-size:.95rem;padding:12px 16px}
+  .bslot.dockB{width:54px;height:54px} .bslot.dockB img{width:46px;height:46px}
+  #side{left:max(0px,calc(50% - 320px));right:max(0px,calc(50% - 320px))}
+}
