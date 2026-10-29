@@ -74,6 +74,7 @@ function hideMenu() {
 function menuFrame() {
   const el = menuEl(); if (!el || el.hidden) return;
   const cv = $('menuCv'), W = innerWidth, H = innerHeight, dpr = Math.min(2, window.devicePixelRatio || 1);
+  if (W < 120 || H < 120) { menuRaf = requestAnimationFrame(menuFrame); return; }       // ventana sin tamaño: espera
   if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.width = W + 'px'; cv.style.height = H + 'px'; }
   const c = cv.getContext('2d'), now = performance.now(), ms = now - menuT0 + 1500;
   c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, H);

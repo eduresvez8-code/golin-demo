@@ -23,7 +23,7 @@ const multColor = () => (typeof OPT !== 'undefined' && OPT.colorblind ? PAL.mage
 
 /* ---------------- primitivas ---------------- */
 function pathRoundRect(c, x, y, w, h, r) {
-  r = Math.min(r, w / 2, h / 2);
+  r = Math.max(0, Math.min(r, w / 2, h / 2));          // nunca negativo (ventanas diminutas o sin tamaño)
   c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
   c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
 }
