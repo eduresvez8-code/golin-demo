@@ -254,6 +254,113 @@ const HEADS = {
     circle(c, 0, 0, hr * 0.95); c.fillStyle = PAL.pelo; c.fill();
     for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2 + 0.3; circle(c, Math.cos(a) * hr * 0.45, Math.sin(a) * hr * 0.45, hr * 0.22); c.lineWidth = hr * 0.1; c.strokeStyle = '#4a3a55'; c.stroke(); } },
 };
+/* ---- cabezas rediseñadas (v2.6) ---- */
+HEADS.poste = function (c, hr) {                          // El Poste: la boca del palo del arco vista desde arriba, con red
+  const lw = Math.max(1.5, hr * 0.2);
+  circle(c, 0, 0, hr * 1.02); c.fillStyle = PAL.crema; c.fill();
+  c.save(); circle(c, 0, 0, hr * 1.02); c.clip();
+  c.strokeStyle = 'rgba(26,20,35,0.22)'; c.lineWidth = hr * 0.07;            // la red del arco
+  for (let i = -3; i <= 3; i++) { c.beginPath(); c.moveTo(i * hr * 0.4 - hr, -hr); c.lineTo(i * hr * 0.4 + hr, hr); c.stroke(); c.beginPath(); c.moveTo(i * hr * 0.4 + hr, -hr); c.lineTo(i * hr * 0.4 - hr, hr); c.stroke(); }
+  c.restore();
+  circle(c, 0, 0, hr * 0.62); c.lineWidth = hr * 0.26; c.strokeStyle = PAL.plata; c.stroke();   // el tubo
+  circle(c, 0, 0, hr * 0.4); c.fillStyle = PAL.tinta; c.fill();                                   // el hueco
+  c.beginPath(); c.arc(0, 0, hr * 0.62, Math.PI * 1.1, Math.PI * 1.6); c.lineWidth = hr * 0.1; c.strokeStyle = '#ffffff'; c.stroke();
+  circle(c, 0, 0, hr * 1.02); c.lineWidth = lw; c.strokeStyle = PAL.tinta; c.stroke();
+};
+HEADS.cambio = function (c, hr) {                         // El Cambista: sombrero de paño con un billete en la cinta
+  skull(c, hr * 0.9);
+  c.beginPath(); c.ellipse(0, -hr * 0.05, hr * 1.35, hr * 1.1, 0, 0, Math.PI * 2); inkFill(c, PAL.maderaOsc, hr * 0.16);           // ala
+  c.beginPath(); c.ellipse(0, -hr * 0.1, hr * 0.85, hr * 0.7, 0, 0, Math.PI * 2); inkFill(c, PAL.tinta, hr * 0.14);                  // copa
+  c.beginPath(); c.ellipse(0, -hr * 0.1, hr * 0.85, hr * 0.7, 0, 0, Math.PI * 2); c.lineWidth = hr * 0.22; c.strokeStyle = PAL.madera; c.stroke();   // cinta
+  c.save(); c.translate(hr * 0.62, -hr * 0.62); c.rotate(0.5);
+  pathRoundRect(c, -hr * 0.42, -hr * 0.26, hr * 0.84, hr * 0.52, hr * 0.06); inkFill(c, PAL.cancha, hr * 0.1);                       // billete
+  c.fillStyle = PAL.crema; c.font = `${hr * 0.46}px ${FONT_NUM}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('$', 0, hr * 0.03);
+  c.restore();
+};
+HEADS.tienda = function (c, hr) {                         // El Tendero: gorro de papel de tienda y lápiz tras la oreja
+  skull(c, hr);
+  c.beginPath(); c.moveTo(hr * 1.02, hr * 0.1); c.lineTo(hr * 1.55, -hr * 0.55); c.lineWidth = hr * 0.22; c.strokeStyle = PAL.tinta; c.stroke();     // lápiz
+  c.lineWidth = hr * 0.1; c.strokeStyle = PAL.madera; c.stroke();
+  c.beginPath(); c.ellipse(0, -hr * 0.28, hr * 1.02, hr * 0.78, 0, 0, Math.PI * 2); inkFill(c, PAL.crema, hr * 0.16);                  // gorro
+  c.beginPath(); c.moveTo(-hr * 0.95, -hr * 0.05); c.quadraticCurveTo(0, hr * 0.28, hr * 0.95, -hr * 0.05); c.lineWidth = hr * 0.14; c.strokeStyle = PAL.tinta; c.stroke();   // doblez
+  c.beginPath(); c.moveTo(0, -hr * 1.02); c.lineTo(0, -hr * 0.2); c.lineWidth = hr * 0.06; c.strokeStyle = 'rgba(26,20,35,0.35)'; c.stroke();
+};
+HEADS.kante = function (c, hr) {                          // Kan-Té: pelo cortísimo, orejas grandes y la cabeza redonda
+  for (const sx of [-1, 1]) {
+    circle(c, sx * hr * 1.0, hr * 0.12, hr * 0.38); inkFill(c, PAL.piel, hr * 0.14);
+    circle(c, sx * hr * 1.0, hr * 0.12, hr * 0.17); c.fillStyle = PAL.pielOsc; c.fill();
+  }
+  skull(c, hr, false, true);
+  // el pelo, cortísimo y pegado al cráneo (una media luna oscura en la frente)
+  c.beginPath(); c.arc(0, 0, hr * 0.99, Math.PI * 1.05, Math.PI * 1.95); c.quadraticCurveTo(0, -hr * 0.78, -hr * 0.99 * Math.cos(Math.PI * 0.05), -hr * 0.99 * Math.sin(Math.PI * 0.05)); c.closePath();
+  c.fillStyle = PAL.pelo; c.fill();
+  circle(c, 0, 0, hr); c.lineWidth = Math.max(1.5, hr * 0.2); c.strokeStyle = PAL.tinta; c.stroke();
+  c.beginPath(); c.arc(-hr * 0.32, -hr * 0.08, hr * 0.3, Math.PI * 0.85, Math.PI * 1.45); c.lineWidth = hr * 0.13; c.strokeStyle = '#ffffff'; c.globalAlpha = 0.65; c.stroke(); c.globalAlpha = 1;
+};
+HEADS.lechero = function (c, hr) {                        // El Lechero: cachucha plana crema con botón
+  skull(c, hr);
+  c.beginPath(); c.ellipse(0, -hr * 0.12, hr * 1.12, hr * 0.92, 0, 0, Math.PI * 2); inkFill(c, PAL.crema, hr * 0.16);
+  c.beginPath(); c.ellipse(0, -hr * 0.12, hr * 0.78, hr * 0.62, 0, Math.PI * 1.05, Math.PI * 1.95); c.lineWidth = hr * 0.1; c.strokeStyle = 'rgba(26,20,35,0.35)'; c.stroke();
+  c.beginPath(); c.moveTo(-hr * 0.9, -hr * 0.62); c.quadraticCurveTo(0, -hr * 1.18, hr * 0.9, -hr * 0.62); c.lineWidth = hr * 0.2; c.strokeStyle = PAL.madera; c.stroke();   // visera
+  circle(c, 0, -hr * 0.12, hr * 0.12); c.fillStyle = PAL.tinta; c.fill();
+};
+HEADS.hincha = function (c, hr) {                         // El Hincha: cara pintada con franjas y bufanda
+  for (const sx of [-1, 1]) { pathRoundRect(c, sx * hr * 1.05 - hr * 0.2, hr * 0.0, hr * 0.4, hr * 1.1, hr * 0.12); inkFill(c, PAL.crema, hr * 0.12);
+    c.fillStyle = PAL.cancha; c.fillRect(sx * hr * 1.05 - hr * 0.2, hr * 0.3, hr * 0.4, hr * 0.18); c.fillRect(sx * hr * 1.05 - hr * 0.2, hr * 0.72, hr * 0.4, hr * 0.18); }
+  skull(c, hr);
+  c.save(); circle(c, 0, 0, hr); c.clip();
+  for (const x of [-0.55, 0.0, 0.55]) { c.fillStyle = x === 0 ? PAL.crema : PAL.cancha; c.fillRect(hr * x - hr * 0.14, -hr, hr * 0.28, hr * 2); }
+  c.restore();
+  c.beginPath(); c.arc(0, 0, hr, Math.PI * 1.15, Math.PI * 1.85); c.lineWidth = hr * 0.3; c.strokeStyle = PAL.pelo; c.stroke();
+  circle(c, 0, 0, hr); c.lineWidth = Math.max(1.5, hr * 0.2); c.strokeStyle = PAL.tinta; c.stroke();
+};
+HEADS.corneta = function (c, hr) {                        // El Corneta: gorro de hincha y una vuvuzela
+  circle(c, 0, 0, hr * 1.04); inkFill(c, PAL.cancha, hr * 0.18);
+  c.save(); circle(c, 0, 0, hr * 1.04); c.clip();
+  for (const x of [-0.6, 0.0, 0.6]) { c.fillStyle = PAL.crema; c.fillRect(hr * x - hr * 0.12, -hr, hr * 0.24, hr * 2); }
+  c.restore(); circle(c, 0, 0, hr * 1.04); c.lineWidth = hr * 0.18; c.strokeStyle = PAL.tinta; c.stroke();
+  c.beginPath(); c.moveTo(hr * 0.2, -hr * 0.5); c.lineTo(hr * 1.1, -hr * 2.1); c.lineTo(hr * 1.75, -hr * 1.75); c.lineTo(hr * 0.6, -hr * 0.3); c.closePath(); inkFill(c, PAL.crema, hr * 0.14);
+  c.beginPath(); c.moveTo(hr * 1.1, -hr * 2.1); c.lineTo(hr * 1.75, -hr * 1.75); c.lineWidth = hr * 0.16; c.strokeStyle = PAL.madera; c.stroke();
+};
+HEADS.abuela = function (c, hr) {                         // La Abuela: moño canoso y gafas de lectura
+  circle(c, 0, hr * 0.78, hr * 0.5); inkFill(c, '#D9D6DE', hr * 0.14);                    // el moño, atrás
+  skull(c, hr);
+  c.beginPath(); c.arc(0, 0, hr * 1.0, Math.PI * 0.95, Math.PI * 2.05); c.lineTo(hr * 0.7, -hr * 0.05); c.quadraticCurveTo(0, hr * 0.12, -hr * 0.7, -hr * 0.05); c.closePath(); inkFill(c, '#D9D6DE', hr * 0.14);   // pelo canoso
+  for (const sx of [-1, 1]) { circle(c, sx * hr * 0.4, -hr * 0.62, hr * 0.28); c.fillStyle = 'rgba(244,234,213,0.8)'; c.fill(); c.lineWidth = hr * 0.12; c.strokeStyle = PAL.tinta; c.stroke(); }
+  c.beginPath(); c.moveTo(-hr * 0.12, -hr * 0.62); c.lineTo(hr * 0.12, -hr * 0.62); c.lineWidth = hr * 0.1; c.strokeStyle = PAL.tinta; c.stroke();
+};
+HEADS.chilena = function (c, hr) {                        // Chilena: pelo largo peinado hacia atrás y vincha crema con estrella
+  skull(c, hr);
+  c.beginPath(); c.arc(0, 0, hr * 1.02, Math.PI * 0.96, Math.PI * 2.04);                    // el pelo cubre la parte de arriba
+  c.quadraticCurveTo(hr * 0.55, hr * 0.05, 0, -hr * 0.05); c.quadraticCurveTo(-hr * 0.55, hr * 0.05, -hr * 1.0, hr * 0.0); c.closePath();
+  inkFill(c, PAL.pelo, hr * 0.14);
+  c.beginPath(); c.arc(0, 0, hr * 0.72, Math.PI * 1.2, Math.PI * 1.55); c.lineWidth = hr * 0.14; c.strokeStyle = 'rgba(255,255,255,0.5)'; c.stroke();   // brillo
+  pathRoundRect(c, -hr * 0.98, -hr * 0.34, hr * 1.96, hr * 0.3, hr * 0.1); inkFill(c, PAL.crema, hr * 0.12);                             // vincha
+  c.beginPath(); for (let i = 0; i < 10; i++) { const r = i % 2 ? hr * 0.07 : hr * 0.17, a = -Math.PI / 2 + i * Math.PI / 5; c.lineTo(Math.cos(a) * r, -hr * 0.19 + Math.sin(a) * r); }
+  c.closePath(); c.fillStyle = PAL.tinta; c.fill();                                                                                         // estrella
+};
+/* Detalles del cuerpo de algunos muñecos (se dibujan encima de la camiseta) */
+const DECOR = {
+  tendero(c, R) {                                         // delantal verde con bolsillo y moneda
+    const lw = Math.max(2, R * 0.12), top = -R * 0.55, bot = R * 0.5;
+    pathRoundRect(c, -R * 0.5, top + R * 0.1, R * 1.0, bot - top - R * 0.1, R * 0.16); inkFill(c, PAL.cancha, lw);
+    for (const sx of [-1, 1]) { c.beginPath(); c.moveTo(sx * R * 0.42, top + R * 0.14); c.lineTo(sx * R * 0.82, top + R * 0.02); c.lineWidth = R * 0.12; c.strokeStyle = PAL.tinta; c.stroke(); }
+    pathRoundRect(c, -R * 0.3, bot - R * 0.5, R * 0.6, R * 0.34, R * 0.08); inkFill(c, PAL.madera, lw * 0.7);
+    circle(c, 0, bot - R * 0.33, R * 0.1); c.fillStyle = PAL.crema; c.fill();
+  },
+  cambista(c, R) {                                        // chaleco oscuro con un fajo de billetes en el bolsillo
+    const lw = Math.max(2, R * 0.12), top = -R * 0.55, bot = R * 0.5;
+    for (const sx of [-1, 1]) {
+      c.beginPath(); c.moveTo(sx * R * 0.2, top + R * 0.1); c.lineTo(sx * R * 0.9, top + R * 0.1); c.lineTo(sx * R * 0.9, bot - R * 0.05); c.lineTo(sx * R * 0.34, bot - R * 0.05); c.closePath();
+      inkFill(c, PAL.tinta, lw * 0.8);
+    }
+    for (const y of [0, R * 0.2]) { circle(c, R * 0.12, top + R * 0.45 + y, R * 0.05); c.fillStyle = PAL.madera; c.fill(); }
+    c.save(); c.translate(R * 0.55, bot - R * 0.28); c.rotate(-0.25);
+    pathRoundRect(c, -R * 0.22, -R * 0.3, R * 0.44, R * 0.34, R * 0.05); inkFill(c, PAL.cancha, lw * 0.6);
+    c.restore();
+  },
+};
+
 function skull(c, hr, shine, noEars) {
   const lw = Math.max(1.5, hr * 0.2);
   if (!noEars) for (const sx of [-1, 1]) {                // orejas
@@ -291,6 +398,7 @@ function drawFigure(c, id, opts = {}) {
   c.save();
   if (opts.turn) c.rotate(opts.turn);                     // mira hacia el balón / patea
   drawBody(c, R, rect, !!opts.rival);
+  if (def && DECOR[def.id] && !rect) DECOR[def.id](c, R);
   // sombra del cuello y cabeza, un poco adelante (hacia el arco rival)
   c.save(); c.translate(0, rect ? -rect.h * 0.28 : -R * 0.3);
   c.fillStyle = 'rgba(26,20,35,0.25)'; c.beginPath(); c.ellipse(hr * 0.12, hr * 0.28, hr * 0.95, hr * 0.7, 0, 0, Math.PI * 2); c.fill();

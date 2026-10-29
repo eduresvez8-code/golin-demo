@@ -39,9 +39,12 @@
       },
       economy: {
         shotsPerMatch: 5,     // tiros por partido (3–5)
-        quotaBase: 300,
-        quotaGrowth: 2.0,     // ×cuota por partido
-        bossQuotaMult: 1.5,   // ×cuota adicional en partidos de jefe
+        quotaBase: 200,       // meta del partido 1 de la temporada 1
+        quotaGrowth: 1.7,     // ×cuota por partido dentro de una temporada
+        bossQuotaMult: 1.3,   // ×cuota adicional en partidos de jefe
+        seasonGrowth: 6,      // ×cuota por cada temporada que pasa (la temporada 2 pide 6 veces lo de la 1, etc.)
+        seasonStageShift: 4,  // cuánto "avanza" la rareza de la tienda por temporada (4 = la temporada 2 ya usa tiendas de mitad de picadito)
+        tacanoFromSeason: 3,  // El Tacaño no puede ser el primer jefe de una temporada anterior a esta
         matchesPerRound: 3,
         rounds: 3,            // 3 rondas × 3 partidos = 9 partidos
         lives: 3,
@@ -49,6 +52,7 @@
         rewardWin: 5,
         rewardShot: 3,        // por cada tiro sobrante
         rewardGoal: 1,        // por cada gol del partido
+        rewardPlay: 2,        // por jugar un partido, ganes o pierdas
         rerollBase: 2,        // cambiar la vitrina: 2 → 4 → 8 → 16…
         shopSize: 3,
         benchSize: 3,
@@ -104,7 +108,7 @@
     'physics.substeps': [1, 32], 'physics.maxShot': [1, 200], 'physics.stopSpeed': [0.01, 10],
     'economy.shotsPerMatch': [1, 10], 'economy.shopSize': [1, 6], 'economy.benchSize': [1, 8], 'economy.benchMax': [1, 8],
     'economy.pocketSize': [0, 6], 'economy.itemsPerShop': [0, 6], 'economy.legendaryCap': [0, 6], 'economy.legendaryCapMax': [0, 6],
-    'economy.lives': [1, 9], 'economy.rounds': [1, 10], 'economy.matchesPerRound': [1, 10], 'economy.quotaGrowth': [1, 10],
+    'economy.lives': [1, 9], 'economy.rounds': [1, 10], 'economy.matchesPerRound': [1, 10], 'economy.quotaGrowth': [1, 10], 'economy.seasonGrowth': [1, 100], 'economy.seasonStageShift': [0, 20], 'economy.tacanoFromSeason': [1, 1000], 'economy.rewardPlay': [0, 50],
     'economy.stage1To': [1, 100], 'economy.stage2To': [1, 100], 'juice.hitstopMs': [0, 1000], 'juice.slowmoDur': [0, 5],
     'juice.slowmoScale': [0.05, 1], 'juice.goalShakeMax': [0, 3],
   };

@@ -33,21 +33,22 @@ function updateBoard() {
       <div class="cell plata"><small>${t('board.plata')}</small><b class="num"><span class="coin">$</span><span id="bPlata"></span></b></div>
       <div class="cell"><small>${t('board.lives')}</small><b id="bLives"></b></div>
       <button class="btn opt" id="bHelp" title="${t('board.help')}">?</button>
-      <button class="btn opt" id="bOpt" title="${t('opt.title')}">⚙</button>`;
-    $('bOpt').onclick = openOptions;
+      <button class="btn opt" id="bOpt" title="${t('pause.title')}" aria-label="${t('pause.title')}">❚❚</button>`;
+    $('bOpt').onclick = () => { audio(); openPause(); };
     $('bHelp').onclick = () => { audio(); replayTour(); };
   }
   const E = CFG.economy;
-  $('bRound').textContent = G.endless ? t('board.endless') : t('board.round', { r: EC.roundOf(G.match, CFG), n: E.rounds });
-  $('bMatch').innerHTML = G.match + (G.boss ? ` <span class="bossTag">${t('board.boss')}</span>` : G.mod ? ` <span class="bossTag mod">${t('board.mod')}</span>` : '');
+  $('bRound').textContent = (G.season > 1 ? t('board.season', { n: G.season }) + ' · ' : '') + t('board.round', { r: EC.roundOf(Math.max(1, G.match), CFG), n: E.rounds });
+  $('bMatch').innerHTML = (G.match || '—') + (G.boss ? ` <span class="bossTag">${t('board.boss')}</span>` : G.mod ? ` <span class="bossTag mod">${t('board.mod')}</span>` : '');
   $('bRound').textContent += ' · ' + t('level.' + G.level + '.name');
-  $('bQuota').textContent = fmt(G.quota);
+  const qShown = G.match === 0 ? G.metaBase + EC.quotaFor(1, CFG, LM, G.season) : G.quota;       // en la tienda de apertura: la meta que viene
+  $('bQuota').textContent = fmt(qShown);
   if (G.state !== 'scoring') $('bTotal').textContent = fmt(G.total);
-  $('bBar').style.width = clamp((G.total - G.metaBase) / Math.max(1, G.quota - G.metaBase) * 100, 0, 100) + '%';
+  $('bBar').style.width = clamp((G.total - G.metaBase) / Math.max(1, qShown - G.metaBase) * 100, 0, 100) + '%';
   $('bMatchQ').textContent = t('board.matchQuota', { q: fmt(G.matchQuota || G.quota) });
   $('bShots').textContent = '●'.repeat(Math.max(0, G.shotsLeft)) + '○'.repeat(Math.max(0, shotsPerMatch() - G.shotsLeft));
   $('bPlata').textContent = G.plata;
-  $('bLives').textContent = '❤'.repeat(Math.max(0, G.lives)) + '♡'.repeat(Math.max(0, E.lives - G.lives));
+  $('bLives').textContent = '❤'.repeat(Math.max(0, G.lives)) + '♡'.repeat(Math.max(0, G.maxLives - G.lives));
   fitBoardText();
 }
 
@@ -83,12 +84,11 @@ function aimChips() {
   h = wallChip() + h;
   h = (G.total < G.quota ? `<span class="chip small left">${t('chip.left', { n: fmt(G.quota - G.total) })}</span>`
     : `<span class="chip small ok">${t('chip.over', { n: fmt(G.total - G.quota) })}</span>`) + h;
-  if (!G.caciqueUsed && SC.caciqueShots(G.slots, CFG) > 0) h += `<span class="chip small ok">🪶 ${t('chip.cacique')}</span>`;
   const capt = G.slots.find(x => x.doll && x.doll.captain);
   if (capt) h += `<span class="chip small ok">© ${DOLL[capt.doll.id].name}: ${t('captain.tag')}</span>`;
-  if (G.lostPrev && G.slots.some(x => x.doll && x.doll.id === 'revancha' && SC.isActive(x.doll))) h += `<span class="chip small ok">🩹 ${t('chip.revancha', { m: dc('revancha').mult })}</span>`;
   if (SC.veteranoWindow(CFG, G.shotsLeft) && G.slots.some(x => x.doll && x.doll.id === 'veterano' && SC.isActive(x.doll)))
     h += `<span class="chip small ok garra-on">★ ${t('chip.veterano', { m: dc('veterano').xmult })}</span>`;
+  if (kanteBudget((G.shotsTaken || 0) + 1) > 0) h += `<span class="chip small ok garra-on">🛡 ${t('chip.kante')}</span>`;
   if (G.boss === 'niebla') h += `<span class="chip small ko">🌫 ${t('boss.niebla.name')}</span>`;
   if (G.boss === 'tacano') h += `<span class="chip small ko">${t('boss.tacano.name')}</span>`;
   if (G.mod) h += `<span class="chip small">${t('mod.' + G.mod + '.name')}</span>`;
@@ -112,10 +112,6 @@ function shotChips(s) {
     const n = s.distinct.size, need = dc('chilena').needed;
     h += ` <span class="chip small ${touched('chilena') && n >= need ? 'ok' : ''}">✂ ${t('chip.chilena', { n, needed: need })}${touched('chilena') ? '' : ' ' + t('chip.chilenaTouch')}</span>`;
   }
-  if (has('fantasma')) {
-    const late = s.t > dc('fantasma').time && !s.goal;
-    h += ` <span class="chip small ${late ? 'ko' : touched('fantasma') ? 'ok' : ''}">👻 ${t('chip.fantasma', { t: s.t.toFixed(1) })}${touched('fantasma') ? '' : ' ' + t('chip.fantasmaTouch')}</span>`;
-  }
   if (s.garra && s.garra.active) h += ` <span class="chip small ok">✊ ${t('chip.garra', { pct: Math.round(dc('garra').bonus * s.garra.power * 100) })}</span>`;
   if (s.plata) h += ` <span class="chip small plata">$ ${t('chip.tendero', { n: s.plata })}</span>`;
   if (s.goal) h += ` <span class="chip small ok">${t('chip.goal')}</span>`;
@@ -128,7 +124,7 @@ function hidePanel() { $('panel').className = 'hidden'; }
 
 /* Fin de partido: desglose animado de la plata (suena la caja en cada línea). */
 function showMatchEnd(win, rw) {
-  const labels = { win: t('end.win.line'), shots: n => t('end.shots.line', { n }), goals: n => t('end.goals.line', { n }), gaseosa: t('item.gaseosa.name') + ' ×' + CFG.economy.gaseosaMult, colector: t('end.colector.line'), alcancia: t('item.alcancia.name') };
+  const labels = { win: t('end.win.line'), shots: n => t('end.shots.line', { n }), goals: n => t('end.goals.line', { n }), gaseosa: t('item.gaseosa.name') + ' ×' + CFG.economy.gaseosaMult, colector: t('end.colector.line'), alcancia: t('item.alcancia.name'), play: t('end.play.line'), abuela: t('end.abuela.line') };
   const p = panel(`<h1 class="${win ? 'good' : 'bad'}">${win ? t('end.win') : t('end.lose')}</h1>
     ${win ? '' : `<p class="hint">${G.lives > 0 ? t('end.loseNote') : ''}</p>`}
     <div id="pLines"></div>
@@ -165,32 +161,42 @@ function favoriteDoll() {
 }
 function showFinal(win) {
   G.state = 'final';
-  const reached = G.stats.reached || G.match;
-  LOG.endRun({ win, reached, won: G.won, best: G.bestShot, goals: G.stats.goals, level: G.level });
-  const fresh = progressEvent({ type:'run', win, reached, level: G.level });
+  const reached = G.stats.reached || absMatch();
+  LOG.endRun({ win, reached, season: G.season, won: G.won, best: G.bestShot, goals: G.stats.goals, level: G.level });
+  let fresh = [];
+  if (!G.runCounted) { G.runCounted = true; fresh = progressEvent({ type:'run', win, reached, level: G.level }); }   // la primera vez que termina el picadito
+  const newSeason = G.season > (PROFILE.bestSeason || 1);
+  if (newSeason) { PROFILE.bestSeason = G.season; saveProfile(); }
+  const newShot = G.recordShot && G.bestShot > 0;
+  if (!win) clearSave();                                                                                          // sin vidas: no hay nada que continuar
+  const gap = Math.max(0, G.quota - G.total);
+  const killer = !win ? (G.boss ? t('final.killedBy', { b: t('boss.' + G.boss + '.name') }) : t('final.killedAt', { m: G.match })) : '';
   const fav = favoriteDoll();
   const levels = PR.LEVELS.filter(L => L.id <= PROFILE.maxLevel);
   const levelBtns = levels.length > 1 ? `<h3 class="lvlTitle">${t('level.pick')}</h3><div class="lvlRow">${levels.map(L =>
     `<button class="btn lvl ${L.id === (win ? Math.min(G.level + 1, PROFILE.maxLevel) : G.level) ? 'on' : ''}" data-l="${L.id}" title="${t('level.' + L.id + '.rule')}">${L.id}. ${t('level.' + L.id + '.name')}</button>`).join('')}</div>` : '';
   panel(`<h1 class="${win ? 'good' : 'bad'}">${win ? t('final.win') : t('final.lose')}</h1>
-    <p class="hint">${win ? t('final.winSub') : t('final.loseSub')}</p>
+    <p class="hint">${win ? t('final.seasonDone', { n: G.season }) + '. ' + t('final.winSub') : killer + ' ' + t('final.short', { n: fmt(gap) })}</p>
+    ${newSeason ? `<p class="record">${t('final.recordSeason')}</p>` : ''}${newShot ? `<p class="record">${t('final.recordShot')}</p>` : ''}
     <div class="rw"><span>${t('final.score')}</span><b class="ptsTxt">${fmt(G.total)}</b></div>
     <div class="rw"><span>${t('final.won')}</span><b>${G.won}</b></div>
-    <div class="rw"><span>${t('final.reached')}</span><b>${G.stats.reached || G.match}</b></div>
+    <div class="rw"><span>${t('final.reached')}</span><b>${G.season > 1 ? t('final.season') + ' ' + G.season + ' · ' : ''}${G.match}</b></div>
     <div class="rw"><span>${t('final.best')}</span><b class="ptsTxt">${fmt(G.bestShot)}</b></div>
     <div class="rw"><span>${t('final.goals')}</span><b>${G.stats.goals}</b></div>
     <div class="rw"><span>${t('final.fav')}</span><b>${fav ? `<img class="mini" src="${dollIcon(fav, 48)}"> ${DOLL[fav].name}` : t('final.none')}</b></div>
     ${win && PROFILE.maxLevel > G.level ? `<p class="hint">${t('level.opened', { n: t('level.' + PROFILE.maxLevel + '.name') })}</p>` : ''}
     ${fresh.length ? `<p class="hint">${t('unlock.title')} ${fresh.map(id => DOLL[id].name).join(', ')}</p>` : ''}
     ${levelBtns}
-    ${win ? `<button class="btn primary" id="pCont">${t('final.continue')}</button>` : ''}
-    <button class="btn ${win ? '' : 'primary'} wide" id="pRematch">${t('final.rematch')}</button>`);
+    ${win ? `<button class="btn primary" id="pCont">${t('final.continueSeason', { n: G.season + 1 })}</button>` : ''}
+    <button class="btn ${win ? '' : 'primary'} wide" id="pRematch">${t('final.rematch')}</button>
+    <button class="btn wide" id="pMenu">${t('final.menu')}</button>`);
   let pick = win ? Math.min(G.level + 1, PROFILE.maxLevel) : G.level;
   document.querySelectorAll('.btn.lvl').forEach(b => b.onclick = () => {
     pick = +b.dataset.l; document.querySelectorAll('.btn.lvl').forEach(x => x.classList.toggle('on', x === b));
   });
-  if (win) { SFX.victory(); $('pCont').onclick = () => { audio(); continueEndless(); }; }
-  $('pRematch').onclick = () => { audio(); resetRun(pick); };
+  if (win) { SFX.victory(); $('pCont').onclick = () => { audio(); nextSeason(); }; }
+  $('pRematch').onclick = () => { audio(); clearSave(); resetRun(pick); };
+  $('pMenu').onclick = () => { audio(); if (pick !== G.level) { PROFILE.lastLevel = Math.min(pick, PROFILE.maxLevel); saveProfile(); } goMenu(true); };
 }
 
 function showBossIntro(boss) {
@@ -437,15 +443,15 @@ function drawTourDemo(cv, kind, ms) {
     c.font = `12px ${FONT_NUM}`; c.fillStyle = PAL.tinta; c.fillText(t('shop.pocket'), 36, 2); c.restore();
     if (p > 0.5) plateText(c, t('tour.demo.items'), 130, 118, 11, PAL.crema);
   } else if (kind === 'legend') {
-    c.save(); c.translate(130, 62); c.scale(1.6, 1.6); drawFigure(c, 'cacique', { tm: ms }); c.restore();
+    c.save(); c.translate(130, 62); c.scale(1.6, 1.6); drawFigure(c, 'mano', { tm: ms }); c.restore();
     plateText(c, '🔒 ' + t('shop.noSellShort').replace('🔒 ', ''), 130, 118, 11, PAL.crema);
   } else if (kind === 'hit') {
     const T = 2400, p = (ms % T) / T, dx = 150, dy = 60;
     const age = p > 0.45 ? (p - 0.45) * T / 1000 : 9, kk = age < 1 ? Math.exp(-age * 9) * Math.cos(age * 42) : 0;
-    c.save(); c.translate(dx, dy); c.scale(1 - 0.3 * kk, 1 + 0.2 * kk); drawFigure(c, 'cabezon', { tm: ms, flash: age < 0.4 ? 1 - age / 0.4 : 0 }); c.restore();
+    c.save(); c.translate(dx, dy); c.scale(1 - 0.3 * kk, 1 + 0.2 * kk); drawFigure(c, 'poste', { tm: ms, flash: age < 0.4 ? 1 - age / 0.4 : 0 }); c.restore();
     const bp = p < 0.45 ? [30 + 95 * (p / 0.45), 125 - 45 * (p / 0.45)] : [125 - 60 * (p - 0.45), 80 + 50 * (p - 0.45)];
     ball(bp[0], bp[1]);
-    if (p > 0.45) drawPtsChip(c, '30', dx + 44, dy - 26, 12);
+    if (p > 0.45) drawPtsChip(c, '20', dx + 44, dy - 26, 12);
   }
   c.restore();
 }
@@ -460,14 +466,14 @@ function chuchoImg(w, h) { const k = w + 'x' + h; return chuchoCache[k] || (chuc
 /* Qué hace Don Chucho hoy. Primero los momentos especiales (easter eggs); si no hay, una escena al azar. */
 function chuchoScene() {
   const v = PROFILE.shopVisits, h = new Date().getHours();
-  const bossWin = G.lastWin && EC.isBoss(G.match, CFG);
-  const base = { glasses: !!G.endless, party: bossWin };
+  const bossWin = G.lastWin && G.match > 0 && EC.isBoss(G.match, CFG);
+  const base = { glasses: G.season > 1, party: bossWin };
   if (v === 1) return Object.assign(base, { key:'saludo', line:'chucho.first' });
   if (!G.lastWin) return Object.assign(base, { key:'empanada', line:'chucho.lost' });
   if (bossWin) return Object.assign(base, { key:'fiesta', line:'chucho.boss' });
   if (v % 10 === 0) return Object.assign(base, { key:'globos', line:'chucho.loyal', n: v });
   if (h >= 21 || h < 6) return Object.assign(base, { key:'dormido', line:'chucho.sleep' });
-  if (G.endless && !PROFILE.eggsSeen.endless) return Object.assign(base, { key:'radio', egg:'endless', line:'chucho.endless' });
+  if (G.season > 1 && !PROFILE.eggsSeen.endless) return Object.assign(base, { key:'radio', egg:'endless', line:'chucho.endless' });
   const pool = ['monedas', 'tinto', 'periodico', 'radio', 'escoba'];
   const key = pool[(v * 7 + G.match) % pool.length];
   const line = G.plata >= 20 ? 'chucho.rich' : G.plata < 4 ? 'chucho.poor' : 'chucho.' + key;
@@ -544,7 +550,7 @@ function playShopIntro(done) {
 }
 /* La reja enrollable: caja arriba con letrero pintado, láminas con remaches y rejillas,
    barra inferior con manija y un candado que se balancea al caer. Encima, el grafiti del barrio. */
-function drawShutter(c, W, H, edge, now, eggs, sinceLand) {
+function drawShutter(c, W, H, edge, now, eggs, sinceLand, opts = {}) {
   const box = 54;
   if (edge > 0) {
     c.save(); c.beginPath(); c.rect(0, 0, W, edge); c.clip();
@@ -560,7 +566,7 @@ function drawShutter(c, W, H, edge, now, eggs, sinceLand) {
     }
     // grafiti en tiza (easter eggs que van apareciendo)
     c.save(); c.globalAlpha = 0.75; c.fillStyle = PAL.crema; c.strokeStyle = PAL.crema; c.textAlign = 'left';
-    c.font = `46px ${FONT_HAND}`; c.save(); c.translate(W * 0.1, edge - H * 0.55); c.rotate(-0.08); c.fillText('GOLÍN', 0, 0); c.restore();
+    if (!opts.noTag) { c.font = `46px ${FONT_HAND}`; c.save(); c.translate(W * 0.1, edge - H * 0.55); c.rotate(-0.08); c.fillText('GOLÍN', 0, 0); c.restore(); }
     if (eggs.corona) { c.save(); c.translate(W * 0.1 + 150, edge - H * 0.62); c.rotate(-0.1); c.lineWidth = 4; c.beginPath();
       c.moveTo(0, 0); c.lineTo(8, -22); c.lineTo(20, -6); c.lineTo(32, -26); c.lineTo(44, -6); c.lineTo(56, -22); c.lineTo(64, 0); c.closePath(); c.stroke(); c.restore(); }
     if (eggs.record) {
@@ -598,7 +604,7 @@ function drawCounterScene(c, W, H, inP, outP, scene, eggs, ms) {
   const cy = H - counterH * rise;
   // Don Chucho detrás del mostrador
   const narrow = W < 600;                                             // celular vertical
-  const cw = Math.min(300, W * (narrow ? 0.44 : 0.26)), ch = cw * 280 / 240, cx = W * (narrow ? 0.55 : 0.72) - cw / 2;
+  const cw = Math.min(300, W * (narrow ? 0.44 : 0.26)), ch = cw * 280 / 240, cx = W * (scene.xFrac || (narrow ? 0.55 : 0.72)) - cw / 2;
   const pop = Math.min(1, inP * 1.4), over = pop < 1 ? 0 : Math.sin(Math.min(1, (ms - 500) / 250) * Math.PI) * 6;
   const chY = cy - ch * 0.84 * pop + over + (1 - rise) * ch;          // hombros justo sobre el mostrador
   // globos detrás (cada 10 visitas)
@@ -731,13 +737,13 @@ function bindBench() {
 }
 function cardHTML(o, i) {
   if (!o) return `<div class="card sold">${t('shop.sold')}</div>`;
-  const d = DOLL[o], tx = dollText(o), price = EC.priceOf(o, CFG, LM), isNew = PROFILE.seen && !PROFILE.seen[o];
+  const d = DOLL[o], tx = dollText(o), price = priceNow(o), isNew = PROFILE.seen && !PROFILE.seen[o];
   return `<div class="card ${rarityClass(o)} ${G.plata < price ? 'cant' : ''} ${G.selectedOffer === i ? 'sel' : ''}" data-i="${i}">
     <img class="portrait" src="${dollIcon(o, 96)}" draggable="false">
     <div class="cbody"><div class="fm">${t('rarity.' + d.rarity)} · ${t('family.' + d.family)}</div>
       <div class="nm">${d.name}</div><div class="ds">${tx.rule}</div><div class="joke">${tx.joke}</div>
       <button class="mini-btn tobench" data-i="${i}">${t('shop.toBench')}</button></div>
-    <div class="price">$${price}</div>${isNew && !PR.STARTERS.includes(o) ? `<span class="newTag">${t('shop.new')}</span>` : ''}</div>`;
+    <div class="price">${price === 0 ? t('shop.free') : '$' + price}</div>${isNew && !PR.STARTERS.includes(o) ? `<span class="newTag">${t('shop.new')}</span>` : ''}</div>`;
 }
 function itemsHTML() {
   if (!G.shopItems.length) return '';
@@ -752,7 +758,7 @@ function itemsHTML() {
 /* Lo que pide el próximo partido con el marcador acumulado */
 function nextMatchInfo() {
   const m = nextMatchNumber();
-  const meta = (G.lastWin ? G.quota : G.metaBase) + EC.quotaFor(m, CFG, LM);
+  const meta = (G.lastWin ? G.quota : G.metaBase) + EC.quotaFor(m, CFG, LM, G.season);
   const start = G.lastWin ? G.total : G.matchStart;
   return t('shop.nextInfo', { m, q: fmt(meta), f: fmt(Math.max(0, meta - start)), s: shotsPerMatch() });
 }
@@ -820,7 +826,7 @@ function renderSide() {
     side.querySelectorAll('.item[data-it]').forEach(b => b.onclick = () => buyItem(+b.dataset.it));
     for (const o of G.offers) if (o) PROFILE.seen[o] = true;
     saveProfile();
-    renderDock(); bindBench();
+    renderDock(); bindBench(); saveRun();
     $('bReroll').onclick = () => { audio(); rerollShop(); };
     $('bSell').onclick = () => { G.sellMode = !G.sellMode; renderSide(); };
     $('bNext').onclick = startNextMatch;

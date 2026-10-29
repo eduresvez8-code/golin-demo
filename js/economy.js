@@ -30,13 +30,23 @@
     return TABLE_MODS[Math.floor(match / cfg.economy.matchesPerRound) % TABLE_MODS.length];
   }
   /* Sorteo del picadito: qué jefes y qué mesas especiales tocan (distintos entre sí). */
-  function planRun(cfg, rng = Math.random) {
+  /* season: temporada (1 = la primera). El Tacaño (bandas sin puntos) es demasiado duro como primer jefe
+     de las primeras temporadas: antes de cfg.economy.tacanoFromSeason no puede tocar en el partido 3. */
+  function planRun(cfg, rng = Math.random, season = 1) {
     const m = cfg.economy.matchesPerRound, n = totalMatches(cfg);
     const pool = BOSS_POOL.slice(), mods = TABLE_MODS.slice(), plan = { bosses:{}, mods:{} };
-    const take = arr => arr.splice(Math.floor(rng() * arr.length) % arr.length, 1)[0];
-    for (let k = m; k < n; k += m) plan.bosses[k] = take(pool.length ? pool : (pool.push(...BOSS_POOL), pool));
+    const take = (arr, ok) => {
+      const idx = arr.map((x, i) => i).filter(i => !ok || ok(arr[i]));
+      const use = idx.length ? idx : arr.map((x, i) => i);
+      return arr.splice(use[Math.floor(rng() * use.length) % use.length], 1)[0];
+    };
+    for (let k = m; k < n; k += m) {
+      if (!pool.length) pool.push(...BOSS_POOL);
+      const early = k === m && season < (cfg.economy.tacanoFromSeason || 1);
+      plan.bosses[k] = take(pool, early ? (b => b !== 'tacano') : null);
+    }
     plan.bosses[n] = FINAL_BOSS;
-    for (let k = 2; k <= n; k += m) if (!isBoss(k, cfg)) plan.mods[k] = take(mods.length ? mods : (mods.push(...TABLE_MODS), mods));
+    for (let k = 2; k <= n; k += m) if (!isBoss(k, cfg)) plan.mods[k] = take(mods.length ? mods : (mods.push(...TABLE_MODS), mods), null);
     return plan;
   }
   const isFinalBoss = (match, cfg) => match === totalMatches(cfg);
@@ -48,9 +58,9 @@
     return Math.round(q / p) * p;
   }
   /* lm = modificadores de la cancha (progress.levelMods) */
-  function quotaFor(match, cfg, lm) {
+  function quotaFor(match, cfg, lm, season = 1) {
     const E = cfg.economy, L = lm || { quotaMult:1, bossMult:1 };
-    return niceQuota(E.quotaBase * Math.pow(E.quotaGrowth, match - 1) * L.quotaMult * (isBoss(match, cfg) ? E.bossQuotaMult * L.bossMult : 1));
+    return niceQuota(E.quotaBase * Math.pow(E.quotaGrowth, match - 1) * Math.pow(E.seasonGrowth || 1, season - 1) * L.quotaMult * (isBoss(match, cfg) ? E.bossQuotaMult * L.bossMult : 1));
   }
   const priceOf = (id, cfg, lm) => cfg.dolls[id].price + ((lm && lm.priceAdd) || 0);
   const itemPrice = (id, cfg, lm) => cfg.items[id].price + ((lm && lm.priceAdd) || 0);
@@ -79,10 +89,12 @@
     return out;
   }
 
-  /* Plata al terminar el partido. Perder no paga por jugar; los goles sí pagan.
+  /* Plata al terminar el partido. Se paga por jugar (ganes o pierdas); ganar paga más y los goles también.
      result: {win, shotsLeft, goals}. Los tiros saltados cuentan como sobrantes. */
   function matchRewards(result, cfg, lm) {
     const E = cfg.economy, lines = [];
+    if (E.rewardPlay > 0) lines.push({ key:'play', n:1, amount:E.rewardPlay });          // por jugar, ganes o pierdas
+    if (result.win && result.abuela > 0) lines.push({ key:'abuela', n:1, amount:result.abuela });
     if (result.win) {
       lines.push({ key:'win', n:1, amount:E.rewardWin });
       if (result.shotsLeft > 0) lines.push({ key:'shots', n:result.shotsLeft, amount:result.shotsLeft * E.rewardShot });
@@ -126,10 +138,10 @@
     return picked;
   }
 
-  /* Legendario por vencer al jefe: 3 → La Mano, 6 → El Diez, 9 (jefe final) → El Cacique. */
+  /* Legendario por vencer al jefe: 3 → La Mano, 6 → El Diez. El jefe final solo ofrece a El Capitán (si ya lo desbloqueaste). */
   function legendaryFor(match, cfg) {
     const m = cfg.economy.matchesPerRound;
-    return match === m ? 'mano' : match === 2 * m ? 'diez' : match === totalMatches(cfg) ? 'cacique' : null;
+    return match === m ? 'mano' : match === 2 * m ? 'diez' : null;
   }
   /* Qué pasa con el legendario ganado:
        'dup'     ya lo tienes → se paga plata en su lugar
@@ -142,11 +154,11 @@
     if (ownedLeg.length >= cap) return 'capfull';
     return bench.some(b => !b) ? 'bench' : 'choose';
   }
-  /* El jefe final da El Cacique; si ya desbloqueaste a El Capitán, te deja elegir entre los dos. */
+  /* El jefe final ofrece a El Capitán, pero solo si ya lo desbloqueaste (ganando un picadito). */
   function legendaryChoices(match, cfg, unlocked) {
     const base = legendaryFor(match, cfg);
-    if (!base) return [];
-    return base === 'cacique' && unlocked && unlocked.includes('capitan') ? ['cacique', 'capitan'] : [base];
+    if (base) return [base];
+    return match === totalMatches(cfg) && unlocked && unlocked.includes('capitan') ? ['capitan'] : [];
   }
   /* El Colector: al cobrar el partido, +per de plata por cada rareza distinta en tu mesa (tope max). */
   function colectorPay(slots, cfg, DOLLS) {
@@ -155,11 +167,16 @@
     const p = cfg.dolls.colector;
     return live.filter(s => s.doll.id === 'colector').length ? Math.min(p.max, p.per * rarities) * live.filter(s => s.doll.id === 'colector').length : 0;
   }
+  /* La Abuela: al ganar el partido, +plata por cada Abuela activa en la mesa. */
+  function abuelaPay(slots, cfg) {
+    const n = slots.filter(s => s.doll && s.doll.id === 'abuela' && !s.doll.muted && !s.doll.expelled).length;
+    return n * cfg.dolls.abuela.plata;
+  }
   /* Los Legendarios no se venden ni se descartan (solo salen al elegir en 'capfull'). */
   const canSell = doll => !!doll && doll.rarity !== 'legendario';
 
   const api = { BOSSES, BOSS_POOL, FINAL_BOSS, TABLE_MODS, totalMatches, isBoss, roundOf, bossFor, isFinalBoss, niceQuota, quotaFor, matchRewards,
-    tableModFor, planRun, priceOf, itemPrice, rollItems, itemPool, canSell, legendaryChoices, colectorPay,
+    tableModFor, planRun, priceOf, itemPrice, rollItems, itemPool, canSell, legendaryChoices, colectorPay, abuelaPay,
     rerollCost, sellValue, rarityWeights, rollShop, legendaryFor, legendaryOutcome };
   GOLIN.economy = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

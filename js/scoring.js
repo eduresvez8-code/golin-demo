@@ -45,7 +45,6 @@
     for (const s of slots) {
       if (s === slot || s.rod !== slot.rod || !s.doll || !isActive(s.doll)) continue;
       if (s.doll.id === 'llave' && Math.abs(s.i - slot.i) === 1) pw *= cfg.dolls.llave.factor;
-      if (s.doll.id === 'arquitecto') pw *= cfg.dolls.arquitecto.factor;
     }
     if (slot.doll && slot.doll.captain && activeOnTable(slots, 'capitan').length) pw *= cfg.dolls.capitan.factor;
     return pw;
@@ -83,11 +82,10 @@
   }
   /* El Diez: Mult base permanente. Kan-Té: rescates disponibles por tiro. */
   function baseMultOf(slots) { return 1 + activeOnTable(slots, 'diez').reduce((a, s) => a + s.doll.value, 0); }
+  /* Potencia total de los Corneta activos (pasivo: no hace falta tocarlos) */
+  function cornetaPower(slots, cfg) { return activeOnTable(slots, 'corneta').reduce((a, s) => a + powerOf(slots, s, cfg), 0); }
   function kanteRescues(slots, cfg) { return activeOnTable(slots, 'kante').reduce((a, s) => a + powerOf(slots, s, cfg), 0); }
   /* El Cacique: tiros extra que puede regalar cuando ibas a perder una vida (una vez por partido). */
-  function caciqueShots(slots, cfg) {
-    return activeOnTable(slots, 'cacique').reduce((a, s) => a + cfg.dolls.cacique.shots * powerOf(slots, s, cfg), 0);
-  }
   function diezList(slots, cfg) { return activeOnTable(slots, 'diez').map(s => ({ uid: s.doll.uid, power: powerOf(slots, s, cfg) })); }
 
   /* ---------- estado del tiro ---------- */
@@ -98,7 +96,8 @@
       touched: new Map(),        // uid → {id, power, count}
       lastOwn: new Map(),        // ballId → último muñeco propio tocado {uid, id, power, muted}
       goal: false, goalTime: null, goals: 0, autogol: false, mano: 0, distinctAtGoal: 0,
-      tenderoRate: 0, tenderoOn: new Set(), plata: 0, split: new Set(),
+      tenderoRate: 0, tenderoOn: new Set(), cambistaOn: new Set(), plata: 0, split: new Set(),
+      walls: 0, lastKind: new Map(), corneta: ctx.corneta || 0, cornetaUsed: false,   // bandas tocadas; de dónde venía cada balón; El Corneta
       garra: ctx.garra || null, kanteLeft: ctx.kante || 0, diez: ctx.diez || [],
       shotsLeft: ctx.shotsLeft,  // tiros que quedan en el partido CONTANDO este
       shotNo: ctx.shotNo,        // número de este tiro dentro del partido (1 = el primero)
@@ -110,7 +109,10 @@
   }
   /* El Veterano se carga en los últimos N tiros del partido (N = window, cuenta regresiva) */
   const veteranoWindow = (cfg, shotsLeftInclThis) => shotsLeftInclThis !== undefined && shotsLeftInclThis <= cfg.dolls.veterano.window;
-  function inheritBall(shot, fromId, toId) { if (shot.lastOwn.has(fromId)) shot.lastOwn.set(toId, shot.lastOwn.get(fromId)); }
+  function inheritBall(shot, fromId, toId) {
+    if (shot.lastOwn.has(fromId)) shot.lastOwn.set(toId, shot.lastOwn.get(fromId));
+    if (shot.lastKind.has(fromId)) shot.lastKind.set(toId, shot.lastKind.get(fromId));
+  }
 
   /* ---------- efectos por muñeco (al contacto) ----------
      Cada caso recibe (shot, ev, p, fx, rng) donde p = cfg.dolls[id] y
@@ -118,9 +120,15 @@
   const pts = (fx, shot, v, src) => { shot.points += v; fx.push({ type:'pts', v, src }); };
   const addM = (fx, shot, v, src) => { shot.mult += v; fx.push({ type:'mult', v, src }); };
   const EFFECTS = {
-    // El Poste: el primer toque del tiro paga pts; el SEGUNDO (y solo ese) paga el doble.
-    poste(s, ev, p, fx) { const n = s.touched.get(ev.doll.uid).count; pts(fx, s, p.pts * (n === 2 ? p.second : 1) * ev.power, 'poste'); },
+    // El Poste: 20 → 40 → 80 → 160… dentro del mismo tiro, siempre y sin tope. Solo puntos.
+    poste(s, ev, p, fx) { const n = s.touched.get(ev.doll.uid).count; pts(fx, s, p.pts * Math.pow(2, n - 1) * ev.power, 'poste'); },
     muro(s, ev, p, fx) { pts(fx, s, p.pts * ev.power, 'muro'); },
+    // El Lechero: solo el primer toque del tiro paga (+30)
+    lechero(s, ev, p, fx) { if (s.touched.get(ev.doll.uid).count === 1) pts(fx, s, p.pts * ev.power, 'lechero'); },
+    // El Hincha: +15 por contacto y +15 más si el balón venía de una banda
+    hincha(s, ev, p, fx) { pts(fx, s, (p.pts + (ev.fromWall ? p.bonus : 0)) * ev.power, 'hincha'); },
+    corneta(s, ev, p, fx) { pts(fx, s, p.pts * ev.power, 'corneta'); },       // lo suyo es pasivo: la primera banda del tiro paga más (contact)
+    abuela(s, ev, p, fx) { pts(fx, s, p.pts * ev.power, 'abuela'); },         // lo suyo es pasivo: plata al ganar (economy.abuelaPay)
     rebotador(s, ev, p, fx) { pts(fx, s, p.pts * ev.power, 'rebotador'); },
     tendero(s, ev, p, fx) {
       pts(fx, s, p.pts * ev.power, 'tendero');
@@ -128,15 +136,14 @@
     },
     ninamal(s, ev, p, fx) { pts(fx, s, ev.doll.value * ev.power, 'ninamal'); },
     veterano(s, ev, p, fx) { pts(fx, s, p.pts * ev.power, 'veterano'); },   // el ×2 va al final (resolve)
-    // Cabezón: 30 → 60 → 120 → 240… dentro del mismo tiro, sin tope. Solo puntos.
-    cabezon(s, ev, p, fx) { const n = s.touched.get(ev.doll.uid).count; pts(fx, s, p.pts * Math.pow(2, n - 1) * ev.power, 'cabezon'); },
+    // Cabezón: +2 Mult en cada contacto, siempre (como en la v2 original). Se suma al momento (+N).
+    cabezon(s, ev, p, fx) { addM(fx, s, p.mult * ev.power, 'cabezon'); },
     garra() {},                                             // pasiva: se resuelve al final
     pirlito(s, ev, p, fx) { pts(fx, s, p.pts * ev.power, 'pirlito'); fx.push({ type:'pirlo', bounces: p.bounces * ev.power }); },
     kante(s, ev, p, fx) { pts(fx, s, p.pts * ev.power, 'kante'); },   // el rescate es pasivo (física)
     rambos(s, ev, p, fx) { fx.push({ type:'rambos' }); },  // ×N al final
     llave(s, ev, p, fx) { pts(fx, s, p.pts, 'llave'); },
     chilena(s, ev, p, fx) { pts(fx, s, p.pts * ev.power, 'chilena'); },
-    fantasma(s, ev, p, fx) { pts(fx, s, p.pts * ev.power, 'fantasma'); },
     pesi(s, ev, p, fx, rng) {
       pts(fx, s, p.pts * ev.power, 'pesi');
       if (rng() < Math.min(1, p.chance * ev.power)) fx.push({ type:'gambeta' });
@@ -147,10 +154,8 @@
       if (!s.split.has(ev.doll.uid)) { s.split.add(ev.doll.uid); fx.push({ type:'split', count: ev.power }); }
     },
     bekam(s, ev, p, fx) { pts(fx, s, p.pts * ev.power, 'bekam'); fx.push({ type:'bekam', time: p.curveTime, turn: p.turn * ev.power }); },
-    cazagoles() {},                                         // +Mult al gol (ver goal())
-    cambista(s, ev, p, fx) {                                // +plata la PRIMERA vez que lo tocas en cada partido
-      const key = s.matchId === undefined ? 'sin-partido' : s.matchId;
-      if (ev.doll.cambistaMatch !== key) { ev.doll.cambistaMatch = key; const v = p.plata * ev.power; s.plata += v; fx.push({ type:'plata', v, src:'cambista' }); }
+    cambista(s, ev, p, fx) {                                // +plata solo la PRIMERA vez que lo tocas en cada tiro (el Tendero cobra todos los contactos)
+      if (!s.cambistaOn.has(ev.doll.uid)) { s.cambistaOn.add(ev.doll.uid); const v = p.plata * ev.power; s.plata += v; fx.push({ type:'plata', v, src:'cambista' }); }
     },
     antena(s, ev, p, fx) { pts(fx, s, p.pts * ev.power, 'antena'); },        // la atracción es física (game.js)
     madrugador(s, ev, p, fx) { pts(fx, s, p.pts * ev.power, 'madrugador'); }, // ×N al final si es el primer tiro y gol
@@ -158,17 +163,11 @@
     gato(s, ev, p, fx) { pts(fx, s, p.pts * ev.power, 'gato'); },             // la atajada es pasiva (física)
     costurera(s, ev, p, fx) { pts(fx, s, p.pts * ev.power, 'costurera'); },   // su premio lo cobran los vecinos (stitchBonus)
     caliente(s, ev, p, fx) { fx.push({ type:'caliente' }); },                  // ×N al final si lo tocaste
-    arquitecto(s, ev, p, fx) { pts(fx, s, p.pts, 'arquitecto'); },            // su potencia la reparte en la barra (powerOf)
     colector() {},                                          // paga al cobrar el partido (economy.colectorPay)
-    revancha(s, ev, p, fx) {
-      pts(fx, s, p.pts * ev.power, 'revancha');
-      if (s.lostPrev) addM(fx, s, p.mult * ev.power, 'revancha');          // si perdiste el partido anterior
-    },
     justiciero() {},                                        // no suma: protege de los malditos
     capitan() {},                                           // elige a quién le pone la cinta (powerOf)
     mano() {},                                              // actúa en el autogol
     diez() {},                                              // Mult base
-    cacique() {},                                           // salva la vida con un tiro extra (ver caciqueShots)
   };
 
   /* ev: {ballId, kind:'wall'|'rival'|'own', key, doll?, power?, muted?} */
@@ -176,7 +175,14 @@
     const fx = [];
     shot.contacts++;
     shot.distinct.add(ev.key);
-    if (ev.kind === 'wall') pts(fx, shot, cfg.scoring.wallPts, 'wall');
+    const fromWall = shot.lastKind.get(ev.ballId) === 'wall';
+    shot.lastKind.set(ev.ballId, ev.kind);
+    if (ev.kind === 'wall') {
+      shot.walls++;
+      let w = cfg.scoring.wallPts;
+      if (!shot.cornetaUsed && shot.corneta > 0) { shot.cornetaUsed = true; w += cfg.scoring.wallPts * (cfg.dolls.corneta.wallMult - 1) * shot.corneta; }   // El Corneta: la primera banda del tiro paga más
+      pts(fx, shot, w, 'wall');
+    }
     else if (ev.kind === 'rival') fx.push({ type:'rival' });
     else if (ev.kind === 'own') {
       const d = ev.doll, power = ev.power || 1;
@@ -184,9 +190,9 @@
       if (ev.muted) fx.push({ type:'muted' });
       else {
         const prev = shot.touched.get(d.uid);
-        shot.touched.set(d.uid, { id: d.id, power: Math.max(power, prev ? prev.power : 0), count: (prev ? prev.count : 0) + 1 });
+        shot.touched.set(d.uid, { id: d.id, power: Math.max(power, prev ? prev.power : 0), count: (prev ? prev.count : 0) + 1, front: !!ev.front });
         const before = fx.length;
-        EFFECTS[d.id](shot, Object.assign({}, ev, { power }), cfg.dolls[d.id], fx, rng);
+        EFFECTS[d.id](shot, Object.assign({}, ev, { power, fromWall }), cfg.dolls[d.id], fx, rng);
         if (ev.stitch > 0) addM(fx, shot, ev.stitch, 'costurera');   // La Costurera premia a este vecino
         if (fx.length > before) shot.effects++;
       }
@@ -205,11 +211,6 @@
     }
     shot.goals++;
     if (!shot.goal) { shot.goal = true; shot.goalTime = ev.time; shot.distinctAtGoal = shot.distinct.size; }
-    const last = shot.lastOwn.get(ev.ballId);
-    if (last && last.id === 'cazagoles' && !last.muted) {
-      const v = cfg.dolls.cazagoles.mult * last.power;
-      shot.mult += v; fx.push({ type:'mult', v, src:'cazagoles', uid: last.uid });
-    }
     fx.push({ type:'goal' });
     return fx;
   }
@@ -235,12 +236,8 @@
       if (shot.goal && shot.distinctAtGoal >= need) apply('chilena', scaleMult(cfg.dolls.chilena.xmult, c.power), { n: shot.distinctAtGoal });
       else fail('chilena', { n: shot.goal ? shot.distinctAtGoal : shot.distinct.size, needed: need });
     }
-    for (const f of of('fantasma')) {
-      if (shot.goal && shot.goalTime < cfg.dolls.fantasma.time) apply('fantasma', scaleMult(cfg.dolls.fantasma.xmult, f.power), { t: shot.goalTime });
-      else fail('fantasma', { t: shot.goal ? shot.goalTime : null });
-    }
-    for (const c of of('cp7')) {
-      if (shot.goal) apply('cp7', scaleMult(cfg.dolls.cp7.xmult, c.power));
+    for (const c of of('cp7')) {                          // ×3 si juega de delantero (izquierda o centro); si no, ×1.5
+      if (shot.goal) apply('cp7', scaleMult(c.front ? cfg.dolls.cp7.xmultFront : cfg.dolls.cp7.xmult, c.power), { front: !!c.front });
       else fail('cp7', {});
     }
     for (const v of of('veterano')) {
@@ -258,7 +255,6 @@
     for (const c of of('caliente')) apply('caliente', scaleMult(cfg.dolls.caliente.xmult, c.power));
     // El Cabeza Caliente que NO tocaste resta plata (salvo que El Justiciero esté en la mesa)
     const penalty = shot.justiciero ? 0 : shot.calientes.filter(uid => !shot.touched.has(uid)).length * cfg.dolls.caliente.penalty;
-    if (shot.mano) apply('mano', scaleMult(cfg.dolls.mano.xmult, shot.mano));
 
     if (shot.goal) apply('goal', cfg.scoring.goalBonus);
     else if (shot.autogol) apply('autogol', cfg.scoring.autogolFactor);
@@ -287,7 +283,7 @@
   }
   const isExpelled = (inst, played) => inst.expelledFor === played;
 
-  const api = { scaleMult, isActive, powerOf, stitchBonus, justicieroOn, calienteList, gatoChance, garraState, veteranoWindow, baseMultOf, kanteRescues, caciqueShots, diezList,
+  const api = { scaleMult, isActive, powerOf, stitchBonus, justicieroOn, calienteList, gatoChance, garraState, veteranoWindow, baseMultOf, kanteRescues, cornetaPower, diezList,
     newShot, inheritBall, contact, goal, resolve, rambosTick, isExpelled, EFFECTS };
   GOLIN.scoring = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
