@@ -36,6 +36,8 @@
     { id:'caliente',   check: ev => ev.type === 'shot' && ev.mult <= 0 },
     { id:'colector',   check: ev => ev.type === 'shot' && ev.final >= 5000 },
     { id:'justiciero', check: ev => ev.type === 'run' && ev.win && (ev.level || 1) >= 2 },
+    { id:'canterano',  check: ev => ev.type === 'match' && ev.win },
+    { id:'narrador',   check: ev => ev.type === 'shot' && (ev.dolls || 0) >= 4 },
     { id:'capitan',    check: ev => ev.type === 'run' && ev.win && (ev.reached || 0) >= 9 },   // legendario: desde ahí, el jefe final lo ofrece
   ];
 
@@ -48,7 +50,7 @@
     { id:5, key:'final',   noGoalPay:true, priceAdd:1 },   // perder no paga goles; todo cuesta +1
   ];
   function levelMods(level) {
-    const m = { quotaMult:1, shots:0, bossMult:1, noGoalPay:false, priceAdd:0, lifeBonus: level === 1 ? 1 : 0 };   // Potrero: una vida de más
+    const m = { quotaMult:1, shots:0, bossMult:1, noGoalPay:false, priceAdd:0, lifeBonus: 0 };
     for (const L of LEVELS) {
       if (L.id > level) break;
       if (L.quotaMult) m.quotaMult *= L.quotaMult;
@@ -61,7 +63,7 @@
   }
 
   function newProfile() {
-    return { version:1, unlocked: STARTERS.slice(), maxLevel:1, lastLevel:1, runs:0, wins:0, tutorialDone:false, seen:{}, shopVisits:0, eggsSeen:{}, bestShotEver:0, bestSeason:1 };
+    return { version:1, unlocked: STARTERS.slice(), maxLevel:1, lastLevel:1, runs:0, wins:0, tutorialDone:false, seen:{}, shopVisits:0, eggsSeen:{}, bestShotEver:0, bestSeason:1, found:{} };
   }
   /* El perfil viene de localStorage: se reconstruye con solo lo que el juego conoce.
      Ids de muñecos que no existen, textos raros o números absurdos se descartan.
@@ -83,6 +85,7 @@
     p.bestSeason = int(raw.bestSeason, 1, 1e6, 1);
     p.tutorialVersion = int(raw.tutorialVersion, 0, 1e6, 0);
     p.tutorialDone = raw.tutorialDone === true;
+    p.found = {}; for (const k of Object.keys(flags(raw.found))) if (knownIds.includes(k)) p.found[k] = true;      // muñecos que ya tuviste en tu mesa (álbum)
     p.seen = flags(raw.seen); p.coachSeen = flags(raw.coachSeen); p.eggsSeen = flags(raw.eggsSeen);
     return p;
   }
@@ -98,7 +101,7 @@
     const arr = (v, max) => (Array.isArray(v) ? v.slice(0, max) : []);
     const doll = d => {
       if (!d || typeof d !== 'object' || !dollId(d.id)) return null;
-      return { id: d.id, paid: int(d.paid, 0, 1e6, 0), value: num(d.value, -1e12, 1e12, 0), rojas: int(d.rojas, 0, 99, 0), expelledFor: d.expelledFor == null ? null : int(d.expelledFor, 0, 1e9, 0) };
+      return { id: d.id, paid: int(d.paid, 0, 1e6, 0), value: num(d.value, -1e12, 1e12, 0), rojas: int(d.rojas, 0, 99, 0), expelledFor: d.expelledFor == null ? null : int(d.expelledFor, 0, 1e9, 0), captain: d.captain === true };
     };
     const out = {
       v: 1, level: int(raw.level, 1, LEVELS.length, 1), season: int(raw.season, 1, 1e6, 1), match: int(raw.match, 0, ctx.totalMatches, 0),
@@ -107,7 +110,7 @@
       quota: num(raw.quota, 0, 1e15, 0), matchQuota: num(raw.matchQuota, 0, 1e15, 0), bestShot: num(raw.bestShot, 0, 1e15, 0),
       plata: int(raw.plata, 0, 1e9, 0), lives: int(raw.lives, 0, 9, 0), maxLives: int(raw.maxLives, 1, 9, 3), won: int(raw.won, 0, 1e6, 0),
       played: int(raw.played, 0, 1e6, 0), legCap: int(raw.legCap, 0, 6, 2), rerollN: int(raw.rerollN, 0, 30, 0),
-      hasShotRun: raw.hasShotRun === true, freePick: raw.freePick === true,
+      hasShotRun: raw.hasShotRun === true, freePick: raw.freePick === true, seasonDone: raw.seasonDone === true,
       plan: { bosses: {}, mods: {} }, runFlags: {}, stats: { goals: 0, use: {}, reached: 0 },
       pocket: arr(raw.pocket, 8).map(itemId).filter(Boolean), itemsBought: arr(raw.itemsBought, 300).map(itemId).filter(Boolean),
       offers: arr(raw.offers, 6).map(v => (v == null ? null : dollId(v))), shopItems: arr(raw.shopItems, 6).map(v => (v == null ? null : itemId(v))),
@@ -122,6 +125,13 @@
     if (raw.stats && typeof raw.stats === 'object') {
       out.stats.goals = int(raw.stats.goals, 0, 1e9, 0); out.stats.reached = int(raw.stats.reached, 0, 1e9, 0);
       for (const [k, v] of Object.entries(raw.stats.use || {})) if (dollId(k)) out.stats.use[k] = int(v, 0, 1e9, 0);
+    }
+    if (raw.inMatch && typeof raw.inMatch === 'object' && !Array.isArray(raw.inMatch)) {      // partido a medias
+      const m = raw.inMatch, flags = o => { const f = {}; if (o && typeof o === 'object') for (const k of Object.keys(o).slice(0, 20)) if (o[k] === true && itemId(k)) f[k] = true; return f; };
+      out.inMatch = { boss: ctx.bosses.includes(m.boss) ? m.boss : null, mod: ctx.mods.includes(m.mod) ? m.mod : null, shotsLeft: int(m.shotsLeft, 0, 30, 0), shotsTaken: int(m.shotsTaken, 0, 60, 0),
+        goals: int(m.goals, 0, 1e4, 0), kanteShotNo: int(m.kanteShotNo, 1, 30, 1), kanteSpent: int(m.kanteSpent, 0, 99, 0), windDir: m.windDir === -1 ? -1 : 1, manoUsed: m.manoUsed === true,
+        reachedQuota: m.reachedQuota === true, wonOnFirstShot: m.wonOnFirstShot === true, matchFlags: {}, nextShot: flags(m.nextShot) };
+      if (m.matchFlags && typeof m.matchFlags === 'object') for (const k of ['gaseosa', 'radio']) if (m.matchFlags[k] === true) out.inMatch.matchFlags[k] = true;
     }
     const seen = new Set();
     for (const s of arr(raw.slots, 20)) {

@@ -16,6 +16,25 @@ const PAL = {
   // camiseta propia: crema con franjas rojas (el rojo de equipo, no el de Mult)
   camisa:'#F4EAD5', franja:'#B8313C', rivalRaya:'#1E3F8C',
 };
+/* Color de cada familia: es el brillo que da el muñeco cuando el balón lo toca y el punto de color de su carta.
+   Sumador, Multiplicador y Economía usan el color de lo que dan (cian puntos, rojo Mult, amarillo plata). */
+const FAMILY_COLOR = { sumador:'#2EC4B6', multiplicador:'#E63946', economia:'#FFC93C', manipulador:'#FF3D8B', posicional:'#B6E83A', escalador:'#A56BFF', condicional:'#FF9A3C' };
+const familyColor = f => {
+  const cb = typeof OPT !== 'undefined' && OPT.colorblind;                 // modo daltónico: el rojo pasa a magenta y el magenta a blanco
+  if (cb && f === 'multiplicador') return '#FF3D8B';
+  if (cb && f === 'manipulador') return '#F4F4F4';
+  return FAMILY_COLOR[f] || '#F4EAD5';
+};
+const hexA = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${Math.max(0, Math.min(1, a))})`; };
+/* Cada cancha tiene su propia mesa: marco, tapete, líneas y el color de fondo de la pantalla */
+const LEVEL_THEMES = {
+  1: { name:'potrero', frame:'#C9803A', frameDark:'#7A4420', vein:'rgba(122,68,32,0.55)', turf:'#1F8A4C', band:'rgba(14,77,44,0.28)', bands:14, line:'rgba(244,234,213,0.55)', bg:'#0E4D2C' },
+  2: { name:'barrio',  frame:'#B5573B', frameDark:'#6E2F1E', vein:'rgba(60,22,12,0.5)',   turf:'#8A8478', band:'rgba(40,38,34,0.22)',  bands:6,  line:'rgba(244,234,213,0.7)',  bg:'#2F2B26' },
+  3: { name:'liga',    frame:'#C8CED8', frameDark:'#7D8694', vein:'rgba(70,78,92,0.45)',  turf:'#2BA862', band:'rgba(10,70,36,0.38)',  bands:10, line:'rgba(255,255,255,0.8)',  bg:'#0C4A2E' },
+  4: { name:'clasico', frame:'#5A331A', frameDark:'#2B170A', vein:'rgba(20,10,4,0.55)',   turf:'#15663A', band:'rgba(0,0,0,0.26)',     bands:14, line:'rgba(244,234,213,0.5)',  bg:'#08241A', spot:true },
+  5: { name:'final',   frame:'#D4A017', frameDark:'#8C6A0C', vein:'rgba(110,80,6,0.5)',   turf:'#17793F', band:'rgba(5,50,26,0.3)',    bands:12, line:'rgba(242,217,138,0.85)', bg:'#2A2208', spot:true },
+};
+const themeOf = level => LEVEL_THEMES[level] || LEVEL_THEMES[1];
 const FONT_NUM = '"Bungee", "Impact", system-ui, sans-serif';
 const FONT_TXT = '"Rubik", system-ui, sans-serif';
 const FONT_HAND = '"Permanent Marker", "Comic Sans MS", cursive';
@@ -40,7 +59,7 @@ function drawBase(c, rarity, R, rect, tm, rival) {
   // canto de la peana (da volumen) y sombra plana abajo a la derecha
   c.fillStyle = 'rgba(26,20,35,0.35)'; c.beginPath(); c.ellipse(R * 0.18, cy + R * 0.3, rx, ry, 0, 0, Math.PI * 2); c.fill();
   const top = rival ? '#27437F' : rarity === 'raro' ? PAL.plata : rarity === 'especial' ? PAL.crema : rarity === 'legendario' ? PAL.oro : PAL.madera;
-  const edge = rival ? '#16275A' : rarity === 'raro' ? PAL.plataOsc : rarity === 'especial' ? '#D9C7A5' : rarity === 'legendario' ? PAL.oroOsc : PAL.maderaOsc;
+  const edge = rival ? '#16275A' : rarity === 'raro' ? PAL.plataOsc : rarity === 'especial' ? PAL.noche : rarity === 'legendario' ? PAL.oroOsc : PAL.maderaOsc;
   disc(R * 0.16); c.fillStyle = edge; c.fill(); c.lineWidth = lw; c.strokeStyle = PAL.tinta; c.stroke();
   disc(0); c.fillStyle = top; c.fill(); c.lineWidth = lw; c.strokeStyle = PAL.tinta; c.stroke();
   c.save(); disc(0); c.clip();
@@ -51,14 +70,10 @@ function drawBase(c, rarity, R, rect, tm, rival) {
   } else if (rarity === 'raro') {                        // remaches + reflejo duro
     for (const a of [0.15, 0.85, 1.15, 1.85]) { circle(c, Math.cos(a * Math.PI) * rx * 0.8, cy + Math.sin(a * Math.PI) * ry * 0.72, R * 0.09); c.fillStyle = PAL.plataOsc; c.fill(); }
     c.beginPath(); c.ellipse(0, cy, rx * 0.86, ry * 0.8, 0, Math.PI * 1.15, Math.PI * 1.45); c.lineWidth = R * 0.12; c.strokeStyle = '#ffffff'; c.stroke();
-  } else if (rarity === 'especial') {                    // arabesco de chiva: pétalos y puntos de la paleta secundaria
-    const cols = [PAL.madera, PAL.cancha, PAL.maderaOsc, '#E9A15B', PAL.noche];
-    for (let i = 0; i < 10; i++) {
-      const a = i / 10 * Math.PI * 2, x = Math.cos(a) * rx * 0.78, y = cy + Math.sin(a) * ry * 0.72;
-      c.save(); c.translate(x, y); c.rotate(a); c.beginPath(); c.ellipse(0, 0, R * 0.22, R * 0.1, 0, 0, Math.PI * 2);
-      c.fillStyle = cols[i % cols.length]; c.fill(); c.restore();
-      circle(c, Math.cos(a + 0.31) * rx * 0.6, cy + Math.sin(a + 0.31) * ry * 0.52, R * 0.05); c.fillStyle = cols[(i + 2) % cols.length]; c.fill();
-    }
+  } else if (rarity === 'especial') {                    // toldo de tienda de barrio: franjas verde y crema
+    const n = 7, w = rx * 2 / n;
+    for (let i = 0; i < n; i += 2) { c.fillStyle = PAL.cancha; c.fillRect(-rx + i * w, cy - ry, w, ry * 2); }
+    c.beginPath(); c.ellipse(0, cy, rx * 0.86, ry * 0.8, 0, Math.PI * 1.15, Math.PI * 1.45); c.lineWidth = R * 0.1; c.strokeStyle = '#ffffff'; c.stroke();
   } else if (rarity === 'legendario') {                  // oro con brillo que recorre y destellos
     const a = (tm / 650) % (Math.PI * 2);
     c.beginPath(); c.ellipse(0, cy, rx * 0.8, ry * 0.74, 0, a, a + 0.9); c.lineWidth = R * 0.16; c.strokeStyle = '#ffffff'; c.stroke();
@@ -339,6 +354,22 @@ HEADS.chilena = function (c, hr) {                        // Chilena: pelo largo
   c.beginPath(); for (let i = 0; i < 10; i++) { const r = i % 2 ? hr * 0.07 : hr * 0.17, a = -Math.PI / 2 + i * Math.PI / 5; c.lineTo(Math.cos(a) * r, -hr * 0.19 + Math.sin(a) * r); }
   c.closePath(); c.fillStyle = PAL.tinta; c.fill();                                                                                         // estrella
 };
+HEADS.canterano = function (c, hr) {                      // El Canterano: gorra al revés (la visera atrás), todavía con el brillo de la cantera
+  pathRoundRect(c, -hr * 0.72, hr * 0.5, hr * 1.44, hr * 0.62, hr * 0.26); inkFill(c, PAL.maderaOsc, hr * 0.16);          // visera, hacia atrás
+  skull(c, hr);
+  circle(c, 0, -hr * 0.05, hr * 0.9); inkFill(c, PAL.cancha, hr * 0.17);                                                     // la gorra
+  c.beginPath(); c.arc(0, -hr * 0.05, hr * 0.58, Math.PI * 1.1, Math.PI * 1.9); c.lineWidth = hr * 0.1; c.strokeStyle = 'rgba(244,234,213,0.6)'; c.stroke();
+  circle(c, 0, -hr * 0.05, hr * 0.13); c.fillStyle = PAL.crema; c.fill();                                                     // botón
+};
+HEADS.narrador = function (c, hr) {                       // El Narrador: auriculares de transmisión con micrófono
+  skull(c, hr);
+  c.beginPath(); c.arc(0, 0, hr * 1.0, Math.PI * 1.02, Math.PI * 1.98); c.closePath(); inkFill(c, PAL.pelo, hr * 0.14);        // pelo
+  c.beginPath(); c.arc(0, 0, hr * 1.08, Math.PI * 1.0, Math.PI * 2.0); c.lineWidth = hr * 0.24; c.strokeStyle = PAL.tinta; c.stroke();   // diadema
+  c.beginPath(); c.arc(0, 0, hr * 1.08, Math.PI * 1.0, Math.PI * 2.0); c.lineWidth = hr * 0.1; c.strokeStyle = PAL.plata; c.stroke();
+  c.beginPath(); c.moveTo(hr * 1.12, hr * 0.28); c.quadraticCurveTo(hr * 1.05, hr * 1.0, hr * 0.3, hr * 0.92); c.lineWidth = hr * 0.14; c.strokeStyle = PAL.tinta; c.stroke();   // brazo del micrófono
+  for (const sx of [-1, 1]) { pathRoundRect(c, sx * hr * 1.02 - hr * 0.24, -hr * 0.4, hr * 0.48, hr * 0.8, hr * 0.16); inkFill(c, PAL.amarillo, hr * 0.13); }   // orejeras
+  circle(c, hr * 0.26, hr * 0.92, hr * 0.2); inkFill(c, PAL.rojo, hr * 0.1);                                                  // el micrófono
+};
 /* Detalles del cuerpo de algunos muñecos (se dibujan encima de la camiseta) */
 const DECOR = {
   tendero(c, R) {                                         // delantal verde con bolsillo y moneda
@@ -407,9 +438,10 @@ function drawFigure(c, id, opts = {}) {
   c.restore();
   c.restore();
   if (opts.flash > 0.02) {
-    c.globalCompositeOperation = 'source-atop';
-    c.fillStyle = `rgba(255,255,255,${0.8 * opts.flash})`; c.fillRect(-R * 3, -R * 3, R * 6, R * 6);
-    c.globalCompositeOperation = 'source-over';
+    // destello blanco solo sobre el muñeco (antes pintaba un cuadrado de la mesa)
+    c.fillStyle = `rgba(255,255,255,${0.55 * opts.flash})`; c.beginPath();
+    if (rect) pathRoundRect(c, -rect.w / 2, -rect.h / 2, rect.w, rect.h, rect.h / 2); else c.arc(0, 0, R * 1.02, 0, Math.PI * 2);
+    c.fill();
   }
   if (opts.dim) { c.fillStyle = 'rgba(26,20,35,0.55)'; c.beginPath(); c.ellipse(0, R * 0.2, (rect ? rect.w / 2 : R) * 1.3, R * 1.3, 0, 0, Math.PI * 2); c.fill(); }
   c.restore();
@@ -558,9 +590,21 @@ function drawChucho(c, w, h, o = {}) {
     const y = 60 + (1 - o.paper) * 0 + o.paper * 70;
     c.save(); c.translate(0, y - 60);
     pathRoundRect(c, 30, 70, 180, 118, 6); inkFill(c, PAL.crema, 5);
-    c.fillStyle = PAL.tinta; c.font = `16px ${FONT_NUM}`; c.textAlign = 'center'; c.fillText(o.headline || 'EL CLARÍN', 120, 96);
-    c.fillRect(46, 106, 148, 4);
-    for (let r = 0; r < 4; r++) { c.fillRect(46, 118 + r * 14, 64, 5); c.fillRect(126, 118 + r * 14, 68, 5); }
+    // el titular siempre cabe dentro del papel: se achica y, si aun así no cabe, se parte en dos renglones
+    const hl = String(o.headline || 'EL CLARÍN'), maxW = 150;
+    const fit = (txt, size) => { c.font = `${size}px ${FONT_NUM}`; while (size > 9 && c.measureText(txt).width > maxW) { size -= 0.5; c.font = `${size}px ${FONT_NUM}`; } return size; };
+    let lines = [hl], size = fit(hl, 16);
+    if (size < 12 && hl.includes(' ')) {
+      const w = hl.split(' '); let cut = 1, bestD = 1e9;
+      for (let i = 1; i < w.length; i++) { const d = Math.abs(w.slice(0, i).join(' ').length - w.slice(i).join(' ').length); if (d < bestD) { bestD = d; cut = i; } }
+      lines = [w.slice(0, cut).join(' '), w.slice(cut).join(' ')];
+      size = Math.min(...lines.map(l => fit(l, 15)));
+    }
+    c.fillStyle = PAL.tinta; c.font = `${size}px ${FONT_NUM}`; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
+    lines.forEach((l, i) => c.fillText(l, 120, (lines.length > 1 ? 91 : 96) + i * (size + 3)));
+    const dy = lines.length > 1 ? size + 3 - 6 : 0;
+    c.fillRect(46, 106 + dy, 148, 4);
+    for (let r = 0; r < 4; r++) { c.fillRect(46, 118 + dy + r * 14, 64, 5); c.fillRect(126, 118 + dy + r * 14, 68, 5); }
     c.restore();
   }
   // brazo derecho con lo que esté haciendo

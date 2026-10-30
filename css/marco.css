@@ -1,0 +1,17 @@
+/* Marco de celular para verlo en el computador (estilo "rótulo de barrio") */
+:root{--noche:#0E4D2C;--tinta:#1A1423;--crema:#F4EAD5;--madera:#C9803A;--maderaOsc:#7A4420}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--noche);color:var(--crema);font-family:"Rubik",system-ui,sans-serif;
+  background-image:radial-gradient(rgba(255,255,255,.035) 1px,transparent 1px),radial-gradient(rgba(0,0,0,.08) 1px,transparent 1px);background-size:7px 7px,11px 11px;background-position:0 0,3px 5px}
+main{min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;gap:clamp(20px,4vw,64px);padding:8px}
+.cel{--h:max(600px,min(calc(100vh - 16px),1180px));height:var(--h);width:clamp(360px,calc(var(--h) * .47),560px);flex:none;
+  border:9px solid var(--tinta);border-radius:42px;overflow:hidden;background:var(--noche);box-shadow:10px 10px 0 var(--maderaOsc),0 0 0 4px var(--crema)}
+@supports (height:1dvh){.cel{--h:max(600px,min(calc(100dvh - 16px),1180px))}}
+iframe{display:block;width:100%;height:100%;border:0;background:var(--noche)}
+.nota{width:200px;font-size:.95rem;line-height:1.45}
+.nota.izq{text-align:right}
+.nota h1{margin:0 0 6px;font-family:"Bungee","Impact",system-ui,sans-serif;font-weight:400;font-size:2.6rem;line-height:1;-webkit-text-stroke:2px var(--tinta);text-shadow:4px 4px 0 var(--maderaOsc)}
+.nota p{margin:0 0 10px}.nota .chico{font-size:.8rem;opacity:.75}
+.lnk{display:inline-block;margin-top:6px;color:var(--crema);font-weight:700}
+.lnk:focus-visible{outline:3px solid var(--crema);outline-offset:3px}
+@media (max-width:1100px){.nota{display:none}}

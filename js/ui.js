@@ -169,6 +169,7 @@ function showFinal(win) {
   if (newSeason) { PROFILE.bestSeason = G.season; saveProfile(); }
   const newShot = G.recordShot && G.bestShot > 0;
   if (!win) clearSave();                                                                                          // sin vidas: no hay nada que continuar
+  else saveRun({ seasonDone: true });                                                                              // ganaste la temporada: "Continuar" empieza la siguiente
   const gap = Math.max(0, G.quota - G.total);
   const killer = !win ? (G.boss ? t('final.killedBy', { b: t('boss.' + G.boss + '.name') }) : t('final.killedAt', { m: G.match })) : '';
   const fav = favoriteDoll();
@@ -289,15 +290,63 @@ function replayTour() {
   closeTour(true);
   openTour(G.state === 'shop' ? 'shop' : 'full', G.state === 'shop' ? null : TOUR.aim.concat(TOUR.bounce, TOUR.table));
 }
-const TOUR_ORDER = ['aim', 'bounce', 'shop', 'table'];
+/* ---------------- consejos en vivo ----------------
+   El tutorial ya no es una ventana que frena el juego: tiras, y cuando pasa algo por primera vez (la banda, un
+   muñeco, el Mult, el gol, la meta…) sale un cartel corto, sin pausar nada. Cada consejo sale una sola vez.
+   El recorrido largo con animaciones queda en el botón "?" y en Pausa → Cómo se juega. */
+const TIP_CORE = ['aim', 'wall', 'doll', 'meta', 'shop'];            // cuando ya los viste todos, el resto de la ayuda se calla
+const TIP_FOR = { aim:'aim', bounce:'meta', shop:'shop', table:'table', walls2:'walls2', mod:'mod', items:'items', legend:'legend' };
+const TIP_STICKY = { aim:true, shop:true };                              // se quedan hasta que haces lo que piden
+let tipCur = null, tipQ = [], tipTimer2 = 0;
+function tipSeen(k) { return !!(PROFILE.coachSeen && PROFILE.coachSeen['tip.' + k]); }
+/* ¿Se puede mostrar? (nada si ya lo viste o saltaste los consejos) */
+function tip(key, opts) {
+  if (PROFILE.tutorialDone || tipSeen(key) || (tipCur && tipCur.key === key) || tipQ.some(q => q.key === key)) return;
+  const item = { key, sticky: !!(opts && opts.sticky) || !!TIP_STICKY[key] };
+  if (tipCur && (tipCur.sticky || Date.now() - tipCur.t < 2600)) { if (tipQ.length < 4) tipQ.push(item); return; }   // de a uno; el que pide algo se queda hasta que lo haces
+  showTip(item);
+}
+const tipEvent = key => { if (!PROFILE.tutorialDone && !tipSeen(key)) tip(key); };
+function hideTip(done) {
+  const el = $('tip'); if (el) el.remove();
+  clearTimeout(tipTimer2);
+  if (tipCur && done) { PROFILE.coachSeen = PROFILE.coachSeen || {}; PROFILE.coachSeen['tip.' + tipCur.key] = true; if (TIP_CORE.every(k => tipSeen(k))) PROFILE.tutorialDone = true; saveProfile(); }
+  tipCur = null;
+  if (done && tipQ.length) { const n = tipQ.shift(); if (!tipSeen(n.key)) showTip(n); }
+}
+/* El que pide algo ("tira", "toca un muñeco") se va cuando lo haces */
+function tipDone(key) { if (tipCur && tipCur.key === key) hideTip(true); }
+function showTip(item) {
+  const old = $('tip'); if (old) old.remove();
+  clearTimeout(tipTimer2);
+  tipCur = Object.assign({ t: Date.now() }, item);
+  const el = document.createElement('div'); el.id = 'tip'; el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite');
+  const body = t('tip.' + item.key);
+  el.innerHTML = '<b class="tipT"></b><p class="tipP"></p><div class="tipB"><button type="button" class="tipSkip"></button><button type="button" class="tipOk"></button></div>';
+  el.querySelector('.tipT').textContent = t('tip.' + item.key + '.title');
+  el.querySelector('.tipP').innerHTML = body.replace(/\n/g, '<br>');
+  el.querySelector('.tipSkip').textContent = t('tip.skip');
+  el.querySelector('.tipOk').textContent = t('tip.ok');
+  document.body.appendChild(el);
+  el.querySelector('.tipOk').onclick = () => { SFX.place(); hideTip(true); };
+  el.querySelector('.tipSkip').onclick = () => { PROFILE.tutorialDone = true; saveProfile(); tipQ = []; hideTip(false); };
+  placeTip();
+  if (!item.sticky) tipTimer2 = setTimeout(() => { if (tipCur === null || tipCur.key !== item.key) return; hideTip(true); }, 6500);
+}
+/* En la compu va a un lado de la mesa (sobra lugar); en el celular, arriba, lejos del balón */
+function placeTip() {
+  const el = $('tip'); if (!el) return;
+  const r = canvas.getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight, W = innerWidth, H = innerHeight;
+  let x, y;
+  if (r.left > w + 28) { x = r.left - w - 18; y = r.top + r.height * 0.38 - h / 2; }
+  else if (W - r.right > w + 28 && r.right + 18 + w < W) { x = r.right + 18; y = r.top + r.height * 0.38 - h / 2; }
+  else { x = W / 2 - w / 2; y = Math.max(r.top + 8, 8); }
+  el.style.left = clamp(x, 8, Math.max(8, W - w - 8)) + 'px'; el.style.top = clamp(y, 8, Math.max(8, H - h - 8)) + 'px';
+}
+window.addEventListener('resize', () => { if ($('tip')) placeTip(); });
 function coach(step) {
-  if (!step || !TOUR[step] || PROFILE.tutorialDone) return;
-  PROFILE.coachSeen = PROFILE.coachSeen || {};
-  if (PROFILE.coachSeen[step]) return;
-  PROFILE.coachSeen[step] = true;
-  if (TOUR_ORDER.every(k => PROFILE.coachSeen[k])) PROFILE.tutorialDone = true;
-  saveProfile();
-  openTour(step);
+  const k = TIP_FOR[step]; if (!k) return;
+  tip(k);
 }
 function tourTargetRect(target) {
   const cv = canvas.getBoundingClientRect(), k = cv.width / CW;
@@ -740,7 +789,7 @@ function cardHTML(o, i) {
   const d = DOLL[o], tx = dollText(o), price = priceNow(o), isNew = PROFILE.seen && !PROFILE.seen[o];
   return `<div class="card ${rarityClass(o)} ${G.plata < price ? 'cant' : ''} ${G.selectedOffer === i ? 'sel' : ''}" data-i="${i}">
     <img class="portrait" src="${dollIcon(o, 96)}" draggable="false">
-    <div class="cbody"><div class="fm">${t('rarity.' + d.rarity)} · ${t('family.' + d.family)}</div>
+    <div class="cbody"><div class="fm"><i class="fdot f-${d.family}"></i>${t('rarity.' + d.rarity)} · ${t('family.' + d.family)}</div>
       <div class="nm">${d.name}</div><div class="ds">${tx.rule}</div><div class="joke">${tx.joke}</div>
       <button class="mini-btn tobench" data-i="${i}">${t('shop.toBench')}</button></div>
     <div class="price">${price === 0 ? t('shop.free') : '$' + price}</div>${isNew && !PR.STARTERS.includes(o) ? `<span class="newTag">${t('shop.new')}</span>` : ''}</div>`;
@@ -844,12 +893,12 @@ function renderSide() {
 }
 /* Álbum: todos los muñecos; los bloqueados muestran su reto */
 function albumHTML() {
-  const n = PROFILE.unlocked.length, shopN = GOLIN.ROSTER.filter(d => d.shop).length;
-  return `<details class="album"><summary><h3>${t('album.title', { n: Math.min(n, shopN), m: shopN })}</h3></summary>
-    ${GOLIN.ROSTER.filter(d => d.shop).map(d => {
-      const open = PROFILE.unlocked.includes(d.id);
-      return `<div class="cat ${open ? '' : 'locked'}"><img class="mini" src="${dollIcon(d.id, 48)}"><div><b>${d.name}</b> · ${t('rarity.' + d.rarity)}<br>
-        ${open ? dollText(d.id).rule : '🔒 ' + t('unlock.' + d.id)}</div></div>`;
+  const shopDolls = GOLIN.ROSTER.filter(d => d.shop), n = shopDolls.filter(d => PROFILE.found[d.id]).length, shopN = shopDolls.length;
+  return `<details class="album"><summary><h3>${t('album.title', { n, m: shopN })}</h3></summary>
+    ${shopDolls.map(d => {
+      const open = !!PROFILE.found[d.id];       // se descubre al tenerlo en la mesa; no viene regalado
+      return `<div class="cat ${open ? '' : 'locked'}"><img class="mini" src="${dollIcon(d.id, 48)}"><div><b>${open ? d.name : '???'}</b> · ${t('rarity.' + d.rarity)}<br>
+        ${open ? dollText(d.id).rule : (PROFILE.unlocked.includes(d.id) ? t('album.inShop') : '🔒 ' + t('unlock.' + d.id))}</div></div>`;
     }).join('')}
     <p class="hint">${t('album.legend')}</p></details>`;
 }
@@ -865,7 +914,7 @@ function tableListHTML() {
 
 function showTooltip(slot, cx, cy, centered) {
   const d = slot.doll, tt = $('tooltip'), tx = dollText(d.id, d), pw = powerOf(slot);
-  tt.innerHTML = `<b class="dname">${DOLL[d.id].name}</b> <span class="tmeta">${t('rarity.' + DOLL[d.id].rarity)} · ${t('rod.' + slot.rod)}</span>
+  tt.innerHTML = `<b class="dname">${DOLL[d.id].name}</b> <span class="tmeta"><i class="fdot f-${DOLL[d.id].family}"></i>${t('rarity.' + DOLL[d.id].rarity)} · ${t('family.' + DOLL[d.id].family)} · ${t('rod.' + slot.rod)}</span>
     <div>${tx.rule}</div><div class="joke">${tx.joke}</div>
     ${pw > 1 ? `<div class="key">🔑 ×${pw}</div>` : ''}
     ${d.expelled ? `<div class="red">🟥 ${t('fx.expelled')}</div>` : ''}
@@ -887,6 +936,43 @@ function showTooltipAt(slot, ms) {
 }
 function hideTooltip() { clearTimeout(tipTimer); $('tooltip').classList.add('hidden'); }
 window.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse') hideTooltip(); }, true);
+
+/* ---------------- menú de un muñeco (tienda): tocas uno y escoges qué hacer ----------------
+   info: {kind:'move', from:slot} (de la mesa) | {kind:'bench', bench:i} (de la banca) */
+function closeDollMenu() { const m = $('dollMenu'); if (m) m.remove(); document.removeEventListener('pointerdown', dollMenuOutside, true); }
+function dollMenuOutside(e) { const m = $('dollMenu'); if (m && !m.contains(e.target)) closeDollMenu(); }
+function openDollMenu(info) {
+  closeDollMenu(); hideTooltip();
+  const slot = info.kind === 'move' ? info.from : null, d = slot ? slot.doll : G.bench[info.bench];
+  if (!d) return;
+  const dd = DOLL[d.id], tx = dollText(d.id, d), sellable = EC.canSell(d), free = G.bench.indexOf(null);
+  const m = document.createElement('div'); m.id = 'dollMenu'; m.setAttribute('role', 'dialog'); m.setAttribute('aria-label', dd.name);
+  m.innerHTML = `<div class="dmHead"><img src="${dollIcon(d.id, 64)}" alt="" width="44" height="44"><div><b class="dname">${dd.name}</b>
+      <span class="tmeta"><i class="fdot f-${dd.family}"></i>${t('rarity.' + dd.rarity)} · ${t('family.' + dd.family)}</span></div></div>
+    <p class="dmRule">${tx.rule}</p>
+    <div class="dmBtns">
+      <button type="button" class="btn" data-a="move">${t('dm.move')}</button>
+      ${slot && free >= 0 ? `<button type="button" class="btn" data-a="bench">${t('dm.bench')}</button>` : ''}
+      <button type="button" class="btn sell" data-a="sell" ${sellable ? '' : 'disabled'}>${sellable ? t('shop.sellFor', { n: EC.sellValue(d) }) : t('shop.noSellShort')}</button>
+    </div>`;
+  document.body.appendChild(m);
+  // junto al muñeco: en la mesa, sobre sus coordenadas; en la banca, sobre su casilla
+  let ax, ay, below = false;
+  if (slot) { const r = canvas.getBoundingClientRect(), k = r.width / CW; ax = r.left + slot.x * k; ay = r.top + slot.y * k; }
+  else { const el = document.querySelector(`.bslot[data-b="${info.bench}"]`); const r = el ? el.getBoundingClientRect() : null; ax = r ? r.left + r.width / 2 : innerWidth / 2; ay = r ? r.top : innerHeight / 2; }
+  const w = m.offsetWidth, h = m.offsetHeight, W = innerWidth, H = innerHeight;
+  let x = ax - w / 2, y = ay - h - 26;
+  if (y < 8) { y = ay + 30; below = true; }
+  m.style.left = clamp(x, 8, Math.max(8, W - w - 8)) + 'px'; m.style.top = clamp(y, 8, Math.max(8, H - h - 8)) + 'px';
+  m.classList.toggle('below', below);
+  m.querySelector('[data-a="move"]').onclick = () => { closeDollMenu(); G.selectedOffer = null; G.pick = slot ? { kind:'move', from:slot } : { kind:'bench', bench:info.bench }; SFX.place(); afterPickChange(); };
+  const tb = m.querySelector('[data-a="bench"]');
+  if (tb) tb.onclick = () => { closeDollMenu(); const i = G.bench.indexOf(null); if (i < 0 || !slot.doll) return; G.bench[i] = slot.doll; slot.doll = null; rebuildDolls(); SFX.place(); renderSide(); };
+  m.querySelector('[data-a="sell"]').onclick = () => { closeDollMenu(); if (slot) sellSlot(slot); else sellBench(info.bench); };
+  setTimeout(() => document.addEventListener('pointerdown', dollMenuOutside, true), 0);
+  m.querySelector('[data-a="move"]').focus({ preventScroll: true });
+}
+window.addEventListener('keydown', e => { if (e.key === 'Escape' && $('dollMenu')) { closeDollMenu(); e.stopPropagation(); } }, true);
 
 /* ---------------- opciones (fase 7) ---------------- */
 function applyOptions() {
@@ -912,6 +998,7 @@ function openOptions() {
     ${range('sfx', 'opt.sfx', 0, 1, 0.05)}
     ${range('textScale', 'opt.text', 0.85, 1.35, 0.05)}
     <button class="btn wide" id="optTut">${t('opt.tutorial')}</button>
+    <button class="btn wide" id="optLog">${t('menu.feedback')}</button>
     ${canFullscreen() ? `<button class="btn wide" id="optFs">${t('opt.fullscreen')}</button>` : ''}
     <button class="btn wide" id="optDbg">${t('opt.debug')}</button>
     <button class="btn primary" id="optClose">${t('opt.close')}</button></div>`;
@@ -926,6 +1013,7 @@ function openOptions() {
   $('optClose').onclick = close;
   if ($('optFs')) $('optFs').onclick = () => { toggleFullscreen(); close(); };
   $('optDbg').onclick = () => { close(); toggleDebug(); };
+  $('optLog').onclick = () => { const b = $('optLog'); copyLog(msg => { b.textContent = msg; setTimeout(() => { if ($('optLog')) b.textContent = t('menu.feedback'); }, 3500); }); };
   $('optTut').onclick = () => { PROFILE.tutorialDone = false; PROFILE.coachSeen = {}; saveProfile(); close(); coach(G.state === 'shop' ? 'shop' : 'aim'); };
   el.addEventListener('pointerdown', e => { if (e.target === el) close(); });
 }

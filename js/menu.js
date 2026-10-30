@@ -12,18 +12,22 @@ let menuRaf = 0, menuT0 = 0, menuScene = null;
 const menuEl = () => $('menu');
 
 /* ---------- datos que se muestran ---------- */
+/* Álbum: un muñeco cuenta cuando ya lo tuviste en tu mesa (comprado o premio de jefe). Nada viene regalado. */
+const isFound = id => !!(PROFILE.found && PROFILE.found[id]);
 function albumCount() {
-  const shop = GOLIN.ROSTER.filter(d => d.shop);
-  return { n: Math.min(shop.filter(d => PROFILE.unlocked.includes(d.id)).length, shop.length), m: shop.length };
+  const all = GOLIN.ROSTER;
+  return { n: all.filter(d => isFound(d.id)).length, m: all.length };
 }
 function levelName(id) { return t('level.' + id + '.name'); }
 
 /* Qué hace Don Chucho en el menú: saluda la primera vez; después, algo distinto cada vez */
 function pickMenuScene() {
+  const pool = ['monedas', 'tinto', 'periodico', 'radio', 'escoba'];
+  const want = /[?&]escena=(\w+)/.exec(location.search);                      // para ver una escena en concreto (?escena=periodico)
+  if (want && pool.includes(want[1])) return { key: want[1], line: 'chucho.' + want[1] };
   const h = new Date().getHours();
   if (!PROFILE.runs) return { key: 'saludo', line: 'chucho.first' };
   if (h >= 21 || h < 6) return { key: 'dormido', line: 'chucho.sleep' };
-  const pool = ['monedas', 'tinto', 'periodico', 'radio', 'escoba'];
   const key = pool[Math.floor(Math.random() * pool.length)];
   return { key, line: 'chucho.' + key };
 }
@@ -37,25 +41,22 @@ function buildMenu() {
   return el;
 }
 function renderMenuUI() {
-  const ui = menuEl().querySelector('.menuUI'), sv = readSave(), a = albumCount();
+  const ui = menuEl().querySelector('.menuUI'), sv = readSave();
+  // Pocas cosas: JUGAR, tres puertas (Álbum, Canchas, Ajustes) y, si hay partida guardada, "empezar de cero". Todo lo demás vive adentro.
   ui.innerHTML =
     '<div class="menuLogo"><h1>GOLÍN</h1><p>' + t('menu.tag') + '</p></div>' +
     '<div class="menuBtns">' +
       '<button class="mBtn main" id="mPlay" type="button">' + (sv ? t('menu.continue') + '<small>' + t('menu.continueSub', { s: sv.season, m: sv.match || 1 }) + '</small>' : t('menu.play')) + '</button>' +
-      (sv ? '<button class="mBtn" id="mNew" type="button">' + t('menu.new') + '</button>' : '') +
       '<div class="mRow"><button class="mBtn small" id="mAlbum" type="button">' + t('menu.album') + '</button>' +
-      '<button class="mBtn small" id="mCanchas" type="button">' + t('menu.canchas') + '</button>' +
+      '<button class="mBtn small" id="mCanchas" type="button">' + t('menu.canchas') + '<small>' + levelName(PROFILE.lastLevel || 1) + '</small></button>' +
       '<button class="mBtn small" id="mOpt" type="button">' + t('menu.options') + '</button></div>' +
-      '<p class="mCancha">' + t('menu.cancha', { n: levelName(PROFILE.lastLevel || 1) }) + '</p>' +
     '</div>' +
-    '<div class="menuFoot">' + '<div class="menuStats"><span>' + t('menu.statSeason', { n: PROFILE.bestSeason || 1 }) + '</span><span>' + t('menu.statDolls', { a: a.n, b: a.m }) + '</span>' +
-      (PROFILE.bestShotEver > 0 ? '<span>' + t('menu.statShot', { n: fmt(PROFILE.bestShotEver) }) + '</span>' : '') + '</div>' + '<div class="mFootRow"><button class="mLink" id="mFeed" type="button">' + t('menu.feedback') + '</button><span id="mToast" class="mNote" role="status" aria-live="polite"></span><span class="mVer">v3.0</span></div></div>';
+    '<div class="menuFoot"><span id="mToast" class="mNote" role="status" aria-live="polite"></span>' + (sv ? '<button class="mLink" id="mNew" type="button">' + t('menu.new') + '</button>' : '') + '<span class="mVer">v3.4</span></div>';
   $('mPlay').onclick = () => { audio(); sv ? startContinue(sv) : startNew(); };
   if (sv) $('mNew').onclick = () => askNew();
   $('mAlbum').onclick = () => { audio(); openAlbum(); };
   $('mCanchas').onclick = () => { audio(); openCanchas(); };
   $('mOpt').onclick = () => { audio(); openOptions(); };
-  $('mFeed').onclick = () => { audio(); copyLog(); };
   $('mPlay').focus({ preventScroll: true });
 }
 function showMenu() {
@@ -97,12 +98,12 @@ function askNew() {
 }
 
 /* Copiar el registro de las últimas partidas, para pegarlo en un mensaje (no hay servidor) */
-function copyLog() {
+function copyLog(onNote) {
   const text = LOG.summary() + '\n\n' + JSON.stringify(LOG.all().slice(-5));
-  const note = msg => { const n = $('mToast'); if (n) { n.textContent = msg; setTimeout(() => { if (n.textContent === msg) n.textContent = ''; }, 4000); } };
+  const note = msg => { if (onNote) return onNote(msg); const n = $('mToast'); if (n) { n.textContent = msg; setTimeout(() => { if (n.textContent === msg) n.textContent = ''; }, 4000); } };
   const fallback = () => {
     const ta = document.createElement('textarea'); ta.value = text; ta.className = 'mCopy'; ta.setAttribute('readonly', '');
-    menuEl().appendChild(ta); ta.focus(); ta.select();
+    document.body.appendChild(ta); ta.focus(); ta.select();
     let ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
     ta.remove(); note(ok ? t('menu.copied') : t('menu.copyFail'));
   };
@@ -121,23 +122,34 @@ function overlay(id, title, bodyHTML) {
   $(id + 'X').focus({ preventScroll: true });
   return o;
 }
-function openAlbum() {
-  const a = albumCount();
-  const cards = GOLIN.ROSTER.map(d => {
-    const open = PROFILE.unlocked.includes(d.id) || d.id === 'mano' || d.id === 'diez';
-    const how = d.shop ? (open ? '' : '🔒 ' + t('unlock.' + d.id)) : (open ? t('album.bossPrize') : '🔒 ' + t('unlock.' + d.id));
-    const tx = open ? dollText(d.id) : null;
+function openAlbum(filter) {
+  const f = filter || 'all', a = albumCount();
+  const albumHow = d => {                                 // cómo se consigue (solo si aún no lo tienes)
+    if (!d.shop) return t('album.how.' + d.id);
+    return PROFILE.unlocked.includes(d.id) ? t('album.inShop') : '🔒 ' + t('unlock.' + d.id);
+  };
+  const shown = GOLIN.ROSTER.filter(d => f === 'all' || (f === 'found') === isFound(d.id));
+  const cards = shown.map(d => {
+    const open = isFound(d.id), tx = open ? dollText(d.id) : null;
     return '<article class="aCard ' + (open ? '' : 'locked') + ' r-' + d.rarity + '"><img src="' + dollIcon(d.id, 96) + '" alt="" width="72" height="72">' +
-      '<div class="aTxt"><b class="dname">' + (open ? d.name : '???') + '</b><span class="aRar">' + t('rarity.' + d.rarity) + (d.shop ? ' · $' + d.price : '') + '</span>' +
-      (open ? '<p>' + tx.rule + '</p><p class="joke">' + tx.joke + '</p>' : '') + (how ? '<p class="aHow">' + how + '</p>' : '') + '</div></article>';
+      '<div class="aTxt"><b class="dname">' + (open ? d.name : '???') + '</b><span class="aRar"><i class="fdot f-' + (open ? d.family : 'none') + '"></i>' + t('rarity.' + d.rarity) + (open ? ' · ' + t('family.' + d.family) : '') + (d.shop ? ' · $' + d.price : '') + '</span>' +
+      (open ? '<p>' + tx.rule + '</p><p class="joke">' + tx.joke + '</p>' : '<p class="aHow">' + albumHow(d) + '</p>') + '</div></article>';
   }).join('');
-  overlay('album', t('album.title2', { n: a.n, m: a.m }), '<div class="aGrid">' + cards + '</div>');
+  const bars = GOLIN.RARITIES.map(r => {
+    const all = GOLIN.ROSTER.filter(d => d.rarity === r), got = all.filter(d => isFound(d.id)).length;
+    return '<span class="aBar ab-' + r + '"><b>' + t('rarity.' + r) + '</b> ' + got + '/' + all.length + '</span>';
+  }).join('');
+  const chip = (k, label, n) => '<button type="button" class="aChip' + (f === k ? ' on' : '') + '" data-f="' + k + '" aria-pressed="' + (f === k) + '">' + label + ' <small>' + n + '</small></button>';
+  const o = overlay('album', t('album.title2', { n: a.n, m: a.m }),
+    '<div class="aTop"><p class="aStats">' + t('menu.statSeason', { n: PROFILE.bestSeason || 1 }) + (PROFILE.bestShotEver > 0 ? ' · ' + t('menu.statShot', { n: fmt(PROFILE.bestShotEver) }) : '') + '</p><div class="aBars">' + bars + '</div><div class="aChips">' + chip('all', t('album.all'), a.m) + chip('found', t('album.found'), a.n) + chip('missing', t('album.missing'), a.m - a.n) + '</div></div>' +
+    (cards ? '<div class="aGrid">' + cards + '</div>' : '<p class="mHint">' + t('album.empty') + '</p>'));
+  o.querySelectorAll('.aChip').forEach(b => b.onclick = () => { audio(); SFX.place(); openAlbum(b.dataset.f === 'missing' ? 'missing' : b.dataset.f); });
 }
 function openCanchas() {
   const cur = PROFILE.lastLevel || 1;
   const posters = PR.LEVELS.map(L => {
     const locked = L.id > PROFILE.maxLevel, on = L.id === cur;
-    return '<button type="button" class="poster ' + (locked ? 'locked' : '') + (on ? ' on' : '') + '" data-l="' + L.id + '" ' + (locked ? 'aria-disabled="true"' : '') + '>' +
+    return '<button type="button" class="poster lv' + L.id + ' ' + (locked ? 'locked' : '') + (on ? ' on' : '') + '" data-l="' + L.id + '" ' + (locked ? 'aria-disabled="true"' : '') + '>' +
       '<span class="pNo">' + L.id + '</span><b>' + t('level.' + L.id + '.name') + '</b><span>' + t('level.' + L.id + '.rule') + '</span>' +
       '<em>' + (locked ? '🔒 ' + t('canchas.locked', { n: t('level.' + (L.id - 1) + '.name') }) : on ? t('canchas.current') : t('canchas.pick')) + '</em></button>';
   }).join('');

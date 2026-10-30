@@ -29,7 +29,7 @@
       shape:{ kind:'circle', r:10 }, rest:0.95, head:'poste', params:{ pts:20 } },   // r 7 → 10 (+43%); duplica en cada toque del tiro
     { id:'muro', name:'El Muro', rarity:'comun', family:'sumador', price:3,
       shape:{ kind:'rect', w:46, h:20 }, rest:0.75, head:'rapado', params:{ pts:40 } },
-    { id:'cambista', name:'El Cambista', rarity:'comun', family:'economia', price:4,
+    { id:'cambista', name:'El Cambista', rarity:'raro', family:'economia', price:6,
       shape:{ kind:'circle', r:15 }, rest:0.85, head:'cambio', params:{ plata:1 } },
     { id:'antena', name:'La Antena', rarity:'comun', family:'manipulador', price:2,
       shape:{ kind:'circle', r:14 }, rest:0.85, head:'antena', params:{ pts:12, radius:70, pull:9 } },
@@ -44,12 +44,14 @@
       shape:{ kind:'circle', r:13 }, rest:0.85, head:'abuela', params:{ pts:10, plata:2 } },
     { id:'madrugador', name:'El Madrugador', rarity:'comun', family:'condicional', price:3,
       shape:{ kind:'circle', r:16 }, rest:0.85, head:'gorrodormir', params:{ pts:10, xmult:1.5 } },
+    { id:'canterano', name:'El Canterano', rarity:'comun', family:'escalador', price:3,
+      shape:{ kind:'circle', r:14 }, rest:0.85, head:'canterano', params:{ base:10, growth:10 } },   // crece al ganar partidos con él en la mesa
 
     // ---------------- RARO ----------------
     { id:'rebotador', name:'El Rebotador', rarity:'raro', family:'manipulador', price:5,
       shape:{ kind:'circle', r:16 }, rest:2.0, head:'resorte', params:{ pts:10, minKick:10 } },
-    { id:'tendero', name:'El Tendero', rarity:'raro', family:'economia', price:6,
-      shape:{ kind:'circle', r:16 }, rest:0.85, head:'tienda', params:{ pts:5, plata:1 } },
+    { id:'tendero', name:'El Tendero', rarity:'especial', family:'economia', price:9,
+      shape:{ kind:'circle', r:16 }, rest:0.85, head:'tienda', params:{ pts:5, plata:1, cap:6 } },
     { id:'ninamal', name:'La Niña Mal', rarity:'raro', family:'escalador', price:5,
       shape:{ kind:'circle', r:16 }, rest:0.85, head:'colitas', params:{ base:4, growth:4 } },
     { id:'cabezon', name:'Cabezón', rarity:'raro', family:'multiplicador', price:6,
@@ -68,6 +70,8 @@
       shape:{ kind:'circle', r:16 }, rest:0.85, head:'orejas', params:{ pts:10, chance:0.25 } },
     { id:'costurera', name:'La Costurera', rarity:'raro', family:'posicional', price:6,
       shape:{ kind:'circle', r:15 }, rest:0.85, head:'agujas', params:{ pts:5, mult:1 } },
+    { id:'narrador', name:'El Narrador', rarity:'raro', family:'sumador', price:6,
+      shape:{ kind:'circle', r:15 }, rest:0.85, head:'narrador', params:{ per:12 } },   // el sumador que sigue valiendo tarde: paga por variedad
     { id:'caliente', name:'El Cabeza Caliente', rarity:'raro', family:'multiplicador', price:5, cursed:true,
       shape:{ kind:'circle', r:17 }, rest:0.85, head:'llamas', params:{ xmult:3, penalty:1 } },
 

@@ -138,10 +138,11 @@
     return picked;
   }
 
-  /* Legendario por vencer al jefe: 3 → La Mano, 6 → El Diez. El jefe final solo ofrece a El Capitán (si ya lo desbloqueaste). */
+  /* Legendario por vencer al jefe: el segundo jefe (partido 6) da La Mano; el jefe final (9) da El Diez, y además
+     El Capitán si ya lo desbloqueaste (eliges uno). Antes La Mano llegaba con el primer jefe y era demasiado fácil. */
   function legendaryFor(match, cfg) {
     const m = cfg.economy.matchesPerRound;
-    return match === m ? 'mano' : match === 2 * m ? 'diez' : null;
+    return match === 2 * m ? 'mano' : match === 3 * m ? 'diez' : null;
   }
   /* Qué pasa con el legendario ganado:
        'dup'     ya lo tienes → se paga plata en su lugar
@@ -157,8 +158,8 @@
   /* El jefe final ofrece a El Capitán, pero solo si ya lo desbloqueaste (ganando un picadito). */
   function legendaryChoices(match, cfg, unlocked) {
     const base = legendaryFor(match, cfg);
-    if (base) return [base];
-    return match === totalMatches(cfg) && unlocked && unlocked.includes('capitan') ? ['capitan'] : [];
+    if (!base) return [];
+    return match === totalMatches(cfg) && unlocked && unlocked.includes('capitan') ? [base, 'capitan'] : [base];
   }
   /* El Colector: al cobrar el partido, +per de plata por cada rareza distinta en tu mesa (tope max). */
   function colectorPay(slots, cfg, DOLLS) {
@@ -172,11 +173,15 @@
     const n = slots.filter(s => s.doll && s.doll.id === 'abuela' && !s.doll.muted && !s.doll.expelled).length;
     return n * cfg.dolls.abuela.plata;
   }
+  /* El Canterano: al ganar un partido, cada Canterano activo en la mesa crece +growth (los de la banca no). */
+  function canteranoGrow(slots, cfg) {
+    return slots.filter(s => s.doll && s.doll.id === 'canterano' && !s.doll.muted && !s.doll.expelled).map(s => ({ uid: s.doll.uid, add: cfg.dolls.canterano.growth }));
+  }
   /* Los Legendarios no se venden ni se descartan (solo salen al elegir en 'capfull'). */
   const canSell = doll => !!doll && doll.rarity !== 'legendario';
 
   const api = { BOSSES, BOSS_POOL, FINAL_BOSS, TABLE_MODS, totalMatches, isBoss, roundOf, bossFor, isFinalBoss, niceQuota, quotaFor, matchRewards,
-    tableModFor, planRun, priceOf, itemPrice, rollItems, itemPool, canSell, legendaryChoices, colectorPay, abuelaPay,
+    tableModFor, planRun, priceOf, itemPrice, rollItems, itemPool, canSell, legendaryChoices, colectorPay, abuelaPay, canteranoGrow,
     rerollCost, sellValue, rarityWeights, rollShop, legendaryFor, legendaryOutcome };
   GOLIN.economy = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

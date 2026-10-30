@@ -31,6 +31,11 @@
   const GOLIN = root.GOLIN = root.GOLIN || {};
 
   const scaleMult = (m, power) => 1 + (m - 1) * power;
+  /* El Tardón: crece tiro a tiro. shotNo y total cuentan desde 1; en el último tiro vale cfg.dolls.tardon.xmult. */
+  function tardonFactor(cfg, shotNo, total) {
+    const x = cfg.dolls.tardon.xmult;
+    return total <= 1 ? x : 1 + (x - 1) * Math.max(0, Math.min(1, (shotNo - 1) / (total - 1)));
+  }
 
   /* ---------- posición: La Llave y estados de muñeco ----------
      slots: [{rod, i, doll}]; doll: {uid, id, value, muted?, expelled?} */
@@ -96,7 +101,7 @@
       touched: new Map(),        // uid → {id, power, count}
       lastOwn: new Map(),        // ballId → último muñeco propio tocado {uid, id, power, muted}
       goal: false, goalTime: null, goals: 0, autogol: false, mano: 0, distinctAtGoal: 0,
-      tenderoRate: 0, tenderoOn: new Set(), cambistaOn: new Set(), plata: 0, split: new Set(),
+      tenderoRate: 0, tenderoPaid: 0, tenderoOn: new Set(), cambistaOn: new Set(), plata: 0, split: new Set(),
       walls: 0, lastKind: new Map(), corneta: ctx.corneta || 0, cornetaUsed: false,   // bandas tocadas; de dónde venía cada balón; El Corneta
       garra: ctx.garra || null, kanteLeft: ctx.kante || 0, diez: ctx.diez || [],
       shotsLeft: ctx.shotsLeft,  // tiros que quedan en el partido CONTANDO este
@@ -158,6 +163,10 @@
       if (!s.cambistaOn.has(ev.doll.uid)) { s.cambistaOn.add(ev.doll.uid); const v = p.plata * ev.power; s.plata += v; fx.push({ type:'plata', v, src:'cambista' }); }
     },
     antena(s, ev, p, fx) { pts(fx, s, p.pts * ev.power, 'antena'); },        // la atracción es física (game.js)
+    // El Narrador: +12 por cada muñeco tuyo distinto que ya tocó el balón en este tiro (contándolo a él)
+    narrador(s, ev, p, fx) { pts(fx, s, p.per * s.touched.size * ev.power, 'narrador'); },
+    // El Canterano: puntos = lo que ha crecido (crece al ganar partidos, ver economy.canteranoGrow)
+    canterano(s, ev, p, fx) { pts(fx, s, ev.doll.value * ev.power, 'canterano'); },
     madrugador(s, ev, p, fx) { pts(fx, s, p.pts * ev.power, 'madrugador'); }, // ×N al final si es el primer tiro y gol
     tardon(s, ev, p, fx) { pts(fx, s, p.pts * ev.power, 'tardon'); },         // ×N al final si es el último tiro y gol
     gato(s, ev, p, fx) { pts(fx, s, p.pts * ev.power, 'gato'); },             // la atajada es pasiva (física)
@@ -197,7 +206,10 @@
         if (fx.length > before) shot.effects++;
       }
     }
-    if (shot.tenderoRate > 0) { shot.plata += shot.tenderoRate; fx.push({ type:'plata', v: shot.tenderoRate }); }
+    if (shot.tenderoRate > 0) {                          // cada contacto cobra, pero hay un tope de plata por tiro
+      const room = Math.max(0, (cfg.dolls.tendero.cap || 1e9) - shot.tenderoPaid), v = Math.min(shot.tenderoRate, room);
+      if (v > 0) { shot.tenderoPaid += v; shot.plata += v; fx.push({ type:'plata', v }); }
+    }
     return fx;
   }
 
@@ -248,9 +260,10 @@
       if (shot.goal && shot.shotNo === 1) apply('madrugador', scaleMult(cfg.dolls.madrugador.xmult, m.power));
       else fail('madrugador', {});
     }
-    for (const m of of('tardon')) {
-      if (shot.goal && shot.shotsLeft === 1) apply('tardon', scaleMult(cfg.dolls.tardon.xmult, m.power));
-      else fail('tardon', {});
+    for (const m of of('tardon')) {                       // sube con cada tiro del partido: ×1 en el primero, ×xmult en el último (con o sin gol)
+      const total = shot.shotNo - 1 + shot.shotsLeft, f = tardonFactor(cfg, shot.shotNo, total);
+      if (f > 1) apply('tardon', scaleMult(f, m.power), { n: shot.shotNo, of: total });
+      else fail('tardon', { n: shot.shotNo, of: total });
     }
     for (const c of of('caliente')) apply('caliente', scaleMult(cfg.dolls.caliente.xmult, c.power));
     // El Cabeza Caliente que NO tocaste resta plata (salvo que El Justiciero esté en la mesa)
@@ -283,7 +296,7 @@
   }
   const isExpelled = (inst, played) => inst.expelledFor === played;
 
-  const api = { scaleMult, isActive, powerOf, stitchBonus, justicieroOn, calienteList, gatoChance, garraState, veteranoWindow, baseMultOf, kanteRescues, cornetaPower, diezList,
+  const api = { scaleMult, tardonFactor, isActive, powerOf, stitchBonus, justicieroOn, calienteList, gatoChance, garraState, veteranoWindow, baseMultOf, kanteRescues, cornetaPower, diezList,
     newShot, inheritBall, contact, goal, resolve, rambosTick, isExpelled, EFFECTS };
   GOLIN.scoring = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

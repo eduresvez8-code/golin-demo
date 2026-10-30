@@ -124,7 +124,15 @@ function addSensor(x1, x2, y, which) {
 }
 addSensor(GR.x1, GR.x2, T.t - 36, 'rival');
 addSensor(GO.x1, GO.x2, T.b + 36, 'own');
+/* Los palos: columnas redondas en las esquinas de cada arco. El balón rebota en ellas como en un palo de verdad
+   (antes solo estaban dibujadas y el balón chocaba con la esquina cuadrada de la banda). Cuentan como banda. */
+const POST_R = 6, posts = [[GR.x1, T.t], [GR.x2, T.t], [GO.x1, T.b], [GO.x2, T.b]].map(([x, y]) => {
+  const b = Bodies.circle(x, y, POST_R, { isStatic:true, restitution:0, friction:0, frictionStatic:0 });
+  b.plugin = { kind:'wall', post:true }; World.add(engine.world, b); walls.push(b); return b;
+});
 
+/* Álbum: un muñeco queda "descubierto" la primera vez que lo tienes (comprado, premio de jefe o en un picadito guardado) */
+function markFound(id) { if (PROFILE.found && !PROFILE.found[id]) { PROFILE.found[id] = true; saveProfile(); } }
 function makeDoll(id, paid) {
   const p = dc(id);
   return { uid: dollUid++, id, rarity: DOLL[id].rarity, paid, value: p.base !== undefined ? p.base : 0, hitT:-9999, nx:0, ny:1, rojas:0, expelledFor:null };
@@ -186,6 +194,9 @@ Events.on(engine, 'collisionStart', ev => {
   }
 });
 
+/* Un tiro no puede durar para siempre: pasado LONG_SHOT segundos el balón ya no gana energía, la fricción se
+   dispara y, a los MAX_SHOT, el tiro se corta. (Un balón atrapado entre dos muñecos pegados, con El Rebotador, rebotaba sin parar.) */
+const LONG_SHOT = 8, MAX_SHOT = 18, MAX_HITS_PER_BODY = 14;
 function restitutionOf(body) {
   const k = body.plugin.kind;
   if (k === 'wall') return phys('wallRest');
@@ -194,6 +205,7 @@ function restitutionOf(body) {
   if (slot.doll.muted) return 0.85;                    // con El Árbitro choca, pero sin efecto
   let e = dc(id).rest;
   if (id === 'rebotador') e = 1 + (e - 1) * powerOf(slot);
+  if (shot && shot.t > LONG_SHOT) e = Math.min(e, 0.85);     // tiro larguísimo: nadie devuelve más fuerza de la que recibe
   return e;
 }
 const RIVAL_GOAL = { x: CW / 2, y: T.t - 10 };
@@ -221,7 +233,7 @@ function physicsStep(ms) {
       if (o.kind === 'doll' && o.slot.doll.id === 'rebotador' && !o.slot.doll.muted) {
         activated('rebotador');
         const outN = -vn * e, k = dc('rebotador').minKick;
-        if (outN < k) { out.x += (k - outN) * h.n.x; out.y += (k - outN) * h.n.y; }
+        if (outN < k && shot.t <= LONG_SHOT) { out.x += (k - outN) * h.n.x; out.y += (k - outN) * h.n.y; }
       }
     }
     // Pesi: la gambeta pendiente redirige ESTE rebote hacia el arco rival, misma velocidad
@@ -283,7 +295,7 @@ function physicsStep(ms) {
       bo.curve.left -= dt;
       if (Math.random() < 0.5) particles.push({ x:bo.body.position.x, y:bo.body.position.y, vx:0, vy:0, t:now(), life:500, color:'#f4ead5', size:3 });
     }
-    const k = phys('drag') * (shot.t > 12 ? 5 : 1);
+    const k = phys('drag') * (shot.t > MAX_SHOT ? 400 : shot.t > LONG_SHOT ? 12 : 1);
     let ns = sp * Math.exp(-k * dt) - phys('rollFric') * dt;
     if (ns < 0) ns = 0;
     // Kan-Té: una vez por tiro, rescata un balón que se va a detener sin gol
@@ -407,6 +419,9 @@ function onContact(bo, other, n, impact) {
   bo.lastHit[key] = shot.t;
   if (last !== undefined && shot.t - last < 0.09) return;          // anti-rebote de eventos
   if (G.state !== 'shooting') return;
+  // tope de contactos con un mismo objeto en un tiro: un balón atrapado entre dos cosas ya no suma para siempre
+  shot.hitsBy = shot.hitsBy || {};
+  if ((shot.hitsBy[key] = (shot.hitsBy[key] || 0) + 1) > MAX_HITS_PER_BODY) return;
   const kind = other.plugin.kind === 'wall' ? 'wall' : other.plugin.kind === 'rival' ? 'rival' : 'own';
   const ev = { ballId: bo.id, kind, key: 'b' + other.id };
   let slot = null;
@@ -430,8 +445,8 @@ function presentContact(bo, other, slot, n, impact, fx, power) {
   }
   for (const f of fx) {
     switch (f.type) {
-      case 'pts': addPoints(f.v, px, py, f.src === 'wall'); gavePts = true; if (['poste', 'muro', 'ninamal', 'cabezon'].includes(f.src)) activated(f.src); break;
-      case 'mult': addMult(f.v, px, py); multHit = true; activated(f.src); break;
+      case 'pts': addPoints(f.v, px, py, f.src === 'wall'); gavePts = true; if (['poste', 'muro', 'ninamal', 'cabezon', 'canterano'].includes(f.src)) activated(f.src); break;
+      case 'mult': addMult(f.v, px, py); multHit = true; activated(f.src); tipEvent('mult'); break;
       case 'plata': activated(f.src || 'tendero'); G.plata += f.v; updateBoard(); popText('+' + f.v, px + 18, py + 14, 13, '#ffc93c', 'plata'); SFX.coin(); break;
       case 'tendero': popText(t('fx.tendero'), slot.x, slot.y - 30, 16, '#f4ead5', 'text'); break;
       case 'pirlo': bo.pirlo = Math.max(bo.pirlo, f.bounces); popText(t('fx.pirlito'), slot.x, slot.y - 30, 14, '#f4ead5', 'text'); break;
@@ -442,7 +457,13 @@ function presentContact(bo, other, slot, n, impact, fx, power) {
     }
   }
   const kind = other.plugin.kind;
-  if (kind === 'wall') { SFX.toc(pitch, impact); wallFlashes.push({ x:px, y:py, nx:n.x, ny:n.y, t:now() }); }
+  if (kind === 'wall') tipEvent('wall'); else if (slot) tipEvent('doll');
+  if (kind === 'wall') {
+    SFX.toc(pitch, impact); wallFlashes.push({ x:px, y:py, nx:n.x, ny:n.y, t:now() });
+    if (other.plugin.post && impact > 2) {                // ¡PALO!: el balón pegó en el poste del arco
+      popText(t('fx.palo'), px, py + (py < CH / 2 ? 26 : -26), 17, '#f4ead5', 'text'); addShake(CFG.juice.shake * 2, 0.15); tone(980, 0.06, 'triangle', 0.14);
+    }
+  }
   else if (kind === 'rival') { SFX.clac(pitch, impact, true); const rv = rivals.find(r => r.body === other); if (rv) rv.hitT = now(); }
   else if (multHit) SFX.multHit(pitch);
   else SFX.clac(pitch, impact, false, gavePts);
@@ -491,7 +512,7 @@ function onGoal(bo, which, pos) {
       hands.push({ x: pos.x, y: T.b - 10, t: now() });
       popText(t('fx.mano'), pos.x, T.b - 60, 24, '#f4ead5', 'text'); stats('mano', 1);
     } else if (f.type === 'goal') {
-      bigText(t('fx.goal'), '#f4ead5', 1200, '', { prio:'now' }); SFX.goal(); addShake(CFG.juice.shake * 9, CFG.juice.goalShakeMax);
+      tipEvent('goal'); bigText(t('fx.goal'), '#f4ead5', 1200, '', { prio:'now' }); SFX.goal(); addShake(CFG.juice.shake * 9, CFG.juice.goalShakeMax);
       confetti(which === 'own' ? CW / 2 : pos.x, T.t, 1);
     } else if (f.type === 'autogol') {
       if (shot.goal || balls.some(x => x.alive)) {       // con varios balones (Gemelo), si otro mete gol, vale el gol: no se castiga
@@ -565,9 +586,11 @@ function shoot(vx, vy, power) {
   shot.items = G.nextShot; G.nextShot = {};
   if (shot.items.pito) closeOwnGoal(true);
   G.state = 'shooting'; G.shotsLeft--; G.shotsTaken = (G.shotsTaken || 0) + 1;
+  tipDone('aim');
   const b = balls[0]; b.moving = true;
   Body.setVelocity(b.body, { x:vx, y:vy });
   SFX.shoot(power); addShake(CFG.juice.shake * 1.5 * power, 0.15);
+  saveRun();                               // el tiro queda gastado: salirse a mitad de uno no lo devuelve
   timeScale = 1; slowmoLeft = 0; hitstop = 0;
   $('shotbar').innerHTML = '';
   updateBoard(); updateShotbar(); hideTooltip();
@@ -618,6 +641,7 @@ function stepLabel(st) {
     case 'garra': return t('mod.garra', { pct: st.pct });
     case 'chilena': return st.fail ? t('mod.chilenaFail', { n: st.n, needed: st.needed }) : t('mod.chilena', { n: st.n });
     case 'cp7': return t(st.front ? 'mod.cp7front' : 'mod.cp7');
+    case 'tardon': return t(st.fail ? 'mod.tardonFail' : 'mod.tardon', { n: st.n, of: st.of });
     case 'veterano': return st.fail ? t('mod.veteranoFail') : t('mod.veterano');
     default: return t('mod.' + st.key + (st.fail && GOLIN.STRINGS.es['mod.' + st.key + 'Fail'] ? 'Fail' : ''));
   }
@@ -663,7 +687,7 @@ async function scoreShot() {
   if (final === 0 && !s.goal) { $('tNote').textContent = t('fx.miss'); $('tNote').className = 'tnote show'; }
   LOG.shot({ final, points: Math.round(R.points), mult: +R.mult.toFixed(2), goal: s.goal, autogol: R.autogol, contacts: s.contacts,
     secs: +s.t.toFixed(1), touched: [...s.touched.values()].map(x => x.id), items: Object.keys(s.items || {}) });
-  progressEvent({ type:'shot', final, mult: R.mult, contacts: s.contacts, walls: s.walls, goal: s.goal });
+  progressEvent({ type:'shot', final, mult: R.mult, contacts: s.contacts, walls: s.walls, goal: s.goal, dolls: s.touched.size });
   const firstShot = !G.hasShotRun; G.hasShotRun = true;
   // récord del picadito: engancha a "un tiro más"
   if (final > G.bestShot && G.bestShot > 0) { $('tNote').textContent = t('fx.best'); $('tNote').className = 'tnote show best'; SFX.stinger(); addShake(CFG.juice.shake * 5, 0.3); }
@@ -705,6 +729,7 @@ async function scoreShot() {
     bigText(t('fx.quota'), '#FFC93C', 1300);
     await wait(650);
   }
+  saveRun();                                                  // el tiro ya sumó: este es el nuevo punto de continuar
   if (G.shotsLeft <= 0) { await wait(250); return endMatch(G.total >= G.quota); }
   resetBall(); G.state = 'aim'; updateShotbar(); renderSide();
   if (firstShot) coach('bounce');
@@ -730,6 +755,9 @@ function endMatch(win) {
   if (rw.lines.some(l => l.key === 'colector')) activated('colector');
   if (rw.lines.some(l => l.key === 'abuela')) activated('abuela');
   if (win) G.won++; else G.lives--;
+  if (win) for (const gr of EC.canteranoGrow(G.slots, CFG)) {            // El Canterano crece con cada partido que ganas
+    const sl = G.slots.find(x => x.doll && x.doll.uid === gr.uid); if (sl) { sl.doll.value += gr.add; sl.doll.hitT = now(); activated('canterano'); }
+  }
   // Marcador acumulado: al ganar, la meta alcanzada es la base del próximo partido y lo que sobra se arrastra.
   // Al perder, el partido se repite desde el marcador con el que empezó.
   if (win) { G.metaBase = G.quota; G.retry = false; } else G.retry = true;
@@ -773,7 +801,7 @@ function swapLegendary(spot, inst) {
 /* Legendario al vencer a un jefe: a la banca; si está llena, el jugador elige qué descartar; si ya lo tiene, plata. */
 function grantLegendary(id, done) {
   const out = EC.legendaryOutcome(id, legendaryIds(), G.bench, G.legCap);
-  const inst = makeDoll(id, 0);
+  const inst = makeDoll(id, 0); markFound(id);
   if (out === 'dup') { G.plata += CFG.economy.legendaryDupPlata; updateBoard(); SFX.caja(4); }
   else if (out === 'bench') G.bench[G.bench.indexOf(null)] = inst;
   showLegendary(id, out, inst, done);
@@ -793,7 +821,7 @@ function openingOffers() {
   return out;
 }
 function openShop(opening, keep) {              // keep: volver a una tienda guardada, con sus mismas ofertas
-  G.state = 'shop'; G.sellMode = false; G.selectedOffer = null; G.pick = null;
+  G.state = 'shop'; G.sellMode = false; G.selectedOffer = null; G.pick = null; closeDollMenu();
   if (!keep) { G.rerollN = 0; G.freePick = !!opening; }
   $('board').classList.remove('victory');
   endDrag();
@@ -821,7 +849,7 @@ function startNextMatch() {
   startMatch();
 }
 function startMatch() {
-  endDrag();
+  endDrag(); closeDollMenu(); tipDone('shop');
   G.boss = G.forceBoss || EC.bossFor(G.match, CFG, G.plan);
   G.mod = G.boss ? null : EC.tableModFor(G.match, CFG, G.plan);
   G.lostPrev = G.retry;                            // La Revancha: ¿perdiste el partido anterior?
@@ -845,6 +873,7 @@ function startMatch() {
   if (G.boss) { G.state = 'bossintro'; showBossIntro(G.boss); }
   else beginMatchPlay();
   updateBoard(); renderSide(); updateShotbar();
+  saveRun();
 }
 function beginMatchPlay() {
   G.state = 'aim'; MUSIC.setMode('match'); MUSIC.setIntensity(0);
@@ -867,7 +896,7 @@ function shotsPerMatch() { return Math.max(1, CFG.economy.shotsPerMatch + LM.sho
 /* Deja el estado de un picadito nuevo, sin abrir nada todavía (el menú se queda esperando) */
 function prepareRun(level) {
   if (level) { PROFILE.lastLevel = Math.min(level, PROFILE.maxLevel); saveProfile(); }
-  G.level = PROFILE.lastLevel || 1; LM = PR.levelMods(G.level);
+  G.level = PROFILE.lastLevel || 1; LM = PR.levelMods(G.level); applyTheme();
   G.plan = EC.planRun(CFG, Math.random, 1); G.pocket = []; G.hasShotRun = false;
   G.runFlags = {}; G.itemsBought = []; G.legCap = CFG.economy.legendaryCap;
   for (const s of G.slots) s.doll = null;
@@ -886,25 +915,32 @@ function resetRun(level) {
 const SAVE_KEY = 'golinSave_v1';
 const saveCtx = () => ({ dollIds: GOLIN.ROSTER.map(d => d.id), itemIds: GOLIN.ITEMS.map(i => i.id), bosses: EC.BOSSES, mods: EC.TABLE_MODS,
   rods: RODS.map(r => r.n), totalMatches: EC.totalMatches(CFG), maxBench: CFG.economy.benchMax });
-function saveRun() {
-  if (G.state !== 'shop') return;
-  const d = x => x && { id: x.id, paid: x.paid, value: x.value, rojas: x.rojas || 0, expelledFor: x.expelledFor == null ? null : x.expelledFor };
+/* Se guarda en cada tienda y también dentro del partido (al arrancar, al disparar y al sumar un tiro), así que salirse
+   NO sirve para repetir un partido ni un tiro: "Continuar" vuelve al mismo punto, con el tiro ya gastado si saliste a mitad de uno. */
+const SAVE_STATES = ['shop', 'bossintro', 'aim', 'shooting', 'scoring'];
+function saveRun(extra) {
+  const seasonDone = !!(extra && extra.seasonDone);          // terminó la temporada: "Continuar" arranca la siguiente
+  if (!SAVE_STATES.includes(G.state) && !seasonDone) return;
+  const d = x => x && { id: x.id, paid: x.paid, value: x.value, rojas: x.rojas || 0, expelledFor: x.expelledFor == null ? null : x.expelledFor, captain: !!x.captain };
   const data = { v:1, level: G.level, season: G.season, match: G.match, lastWin: G.lastWin, retry: G.retry, runCounted: G.runCounted, total: G.total, metaBase: G.metaBase,
     matchStart: G.matchStart, quota: G.quota, matchQuota: G.matchQuota, bestShot: G.bestShot, plata: G.plata, lives: G.lives, maxLives: G.maxLives, won: G.won, played: G.played,
     legCap: G.legCap, rerollN: G.rerollN, hasShotRun: G.hasShotRun, freePick: G.freePick, plan: G.plan, runFlags: G.runFlags, stats: G.stats, pocket: G.pocket, itemsBought: G.itemsBought,
     offers: G.offers, shopItems: G.shopItems, bench: G.bench.map(d), slots: G.slots.filter(s => s.doll).map(s => ({ rod: s.rod, i: s.i, doll: d(s.doll) })) };
+  if (seasonDone) data.seasonDone = true;
+  else if (G.state !== 'shop') data.inMatch = { boss: G.boss, mod: G.mod, shotsLeft: G.shotsLeft, shotsTaken: G.shotsTaken || 0, goals: G.goals || 0, kanteShotNo: G.kanteShotNo || 1,
+    kanteSpent: G.kanteSpent || 0, windDir: G.windDir, manoUsed: !!G.manoUsed, reachedQuota: !!G.reachedQuota, wonOnFirstShot: !!G.wonOnFirstShot, matchFlags: G.matchFlags, nextShot: G.nextShot };
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (e) {}
 }
 function readSave() { try { return PR.sanitizeRun(JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'), saveCtx()); } catch (e) { return null; } }
 function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
 function loadRun(sv) {
-  G.level = sv.level; LM = PR.levelMods(G.level);
+  G.level = sv.level; LM = PR.levelMods(G.level); applyTheme();
   Object.assign(G, { season: sv.season, match: sv.match, lastWin: sv.lastWin, retry: sv.retry, runCounted: sv.runCounted, total: sv.total, metaBase: sv.metaBase, matchStart: sv.matchStart,
     quota: sv.quota, matchQuota: sv.matchQuota, bestShot: sv.bestShot, plata: sv.plata, lives: sv.lives, maxLives: sv.maxLives, won: sv.won, played: sv.played, legCap: sv.legCap,
     rerollN: sv.rerollN, hasShotRun: sv.hasShotRun, freePick: sv.freePick, plan: sv.plan, runFlags: sv.runFlags, stats: sv.stats, pocket: sv.pocket, itemsBought: sv.itemsBought,
     offers: sv.offers, shopItems: sv.shopItems, boss: null, mod: null, forceBoss: null, recordShot: false });
   if (!G.plan.bosses[EC.totalMatches(CFG)]) G.plan = EC.planRun(CFG, Math.random, G.season);   // plan dañado: se sortea de nuevo
-  const mk = x => { if (!x) return null; const m = makeDoll(x.id, x.paid); m.value = x.value; m.rojas = x.rojas; m.expelledFor = x.expelledFor; return m; };
+  const mk = x => { if (!x) return null; const m = makeDoll(x.id, x.paid); m.value = x.value; m.rojas = x.rojas; m.expelledFor = x.expelledFor; m.captain = !!x.captain; markFound(x.id); return m; };
   for (const s of G.slots) s.doll = null;
   for (const e of sv.slots) { const s = G.slots.find(x => x.rod === e.rod && x.i === e.i); if (s) s.doll = mk(e.doll); }
   G.bench = sv.bench.map(mk); while (G.bench.length < CFG.economy.benchSize) G.bench.push(null);
@@ -912,7 +948,16 @@ function loadRun(sv) {
   LOG.startRun({ level: G.level, plan: G.plan, restored: true });
   shot = null; buildRivals(); rebuildDolls();
   G.hold = false;
-  openShop(false, true);
+  if (sv.seasonDone) nextSeason(); else if (sv.inMatch) resumeMatch(sv.inMatch); else openShop(false, true);
+}
+/* Seguir un partido a medias, tal cual quedó (el tiro que estaba en el aire ya se gastó) */
+function resumeMatch(m) {
+  Object.assign(G, { boss: m.boss, mod: m.mod, shotsLeft: m.shotsLeft, shotsTaken: m.shotsTaken, goals: m.goals, kanteShotNo: m.kanteShotNo, kanteSpent: m.kanteSpent,
+    windDir: m.windDir, manoUsed: m.manoUsed, reachedQuota: m.reachedQuota, wonOnFirstShot: m.wonOnFirstShot, matchFlags: m.matchFlags, nextShot: m.nextShot,
+    wonOnLastShot: false, lostPrev: G.retry, forceBoss: null, sellMode: false, selectedOffer: null, pick: null, captainAsked: true });
+  buildRivals(); rebuildDolls(); resetBall();
+  if (G.shotsLeft <= 0) { G.state = 'aim'; endMatch(G.total >= G.quota); return; }
+  beginMatchPlay();
 }
 /* Temporada nueva: 9 partidos más, con metas mayores, jefes y mesas nuevos, y las vidas llenas (punto de control). */
 function nextSeason() {
@@ -937,8 +982,9 @@ function buy(idx, target) {
   if (target.slot && target.slot.doll) { SFX.error(); shopToast(t('shop.noSlot')); return; }
   if (target.bench !== undefined && G.bench[target.bench]) { SFX.error(); shopToast(t('shop.benchFull')); return; }
   if (G.plata < price) { noPlata(idx); return; }
+  tipDone('shop');
   G.plata -= price; if (G.freePick && DOLL[id].rarity === 'comun') G.freePick = false;      // el Común gratis se usa una sola vez
-  const inst = makeDoll(id, price); inst.hitT = now();
+  const inst = makeDoll(id, price); inst.hitT = now(); markFound(id);
   G.offers[idx] = null; G.selectedOffer = null;
   if (target.slot) {
     target.slot.doll = inst; rebuildDolls();
@@ -1077,7 +1123,7 @@ canvas.addEventListener('pointermove', e => {
     if (step !== lastAimStep) { if (step >= 0) SFX.aim(step / 10); if (step === 2 && lastAimStep === -1) SFX.place(); lastAimStep = step; }
     return;
   }
-  if (drag || e.pointerType !== 'mouse') return;          // el tooltip por "pasar encima" es solo para ratón
+  if (drag || e.pointerType !== 'mouse' || $('dollMenu')) return;          // el tooltip por "pasar encima" es solo para ratón
   const s = dollAt(p.x, p.y);
   if (s && (G.state === 'aim' || G.state === 'shop')) showTooltip(s, e.clientX, e.clientY); else hideTooltip();
 });
@@ -1126,9 +1172,7 @@ function tapShop(info) {
   if (G.selectedOffer !== null) { buy(G.selectedOffer, here); return; }
   if (G.pick && !samePick(G.pick, info)) { placePick(here); return; }
   if (G.pick) { clearPick(); return; }
-  G.pick = info.kind === 'bench' ? { kind:'bench', bench:info.bench } : { kind:'move', from:info.from };
-  SFX.place(); afterPickChange();
-  if (info.kind === 'move') showTooltipAt(info.from, 3500);
+  SFX.place(); openDollMenu(info);                         // tocar un muñeco abre su menú: mover, a la banca o vender
 }
 /* Arrastre en la tienda: carta → mesa/banca, mesa → mesa/banca, banca → mesa/banca.
    Robusto: si el navegador interrumpe el arrastre (pointercancel, arrastre nativo de una imagen,
@@ -1238,15 +1282,21 @@ function hatchPattern(c) {                              // modo daltónico: patr
   x.beginPath(); x.moveTo(0, 16); x.lineTo(16, 0); x.stroke();
   return c.createPattern(g, 'repeat');
 }
+/* La cancha escogida cambia el aspecto de la mesa y del fondo */
+function applyTheme() {
+  tableDirty = true;
+  document.documentElement.style.setProperty('--fondo', themeOf(G.level).bg);
+}
 function paintTable() {
   if (!tableLayer) tableLayer = document.createElement('canvas');
   tableLayer.width = canvas.width; tableLayer.height = canvas.height;
   const c = tableLayer.getContext('2d');
   c.setTransform(VIEW_K, 0, 0, VIEW_K, 0, 0);
   // marco de madera con sombra plana y contorno de 6 px
-  c.fillStyle = PAL.maderaOsc; c.fillRect(0, 0, CW, CH);
-  pathRoundRect(c, 4, 4, CW - 8, CH - 8, 18); c.fillStyle = PAL.madera; c.fill();
-  c.fillStyle = 'rgba(122,68,32,0.55)';
+  const th = themeOf(G.level);
+  c.fillStyle = th.frameDark; c.fillRect(0, 0, CW, CH);
+  pathRoundRect(c, 4, 4, CW - 8, CH - 8, 18); c.fillStyle = th.frame; c.fill();
+  c.fillStyle = th.vein;
   for (let y = 12; y < CH; y += 22) c.fillRect(8, y, CW - 16, 2);        // vetas
   pathRoundRect(c, 4, 4, CW - 8, CH - 8, 18); c.lineWidth = 6; c.strokeStyle = PAL.tinta; c.stroke();
   // arcos (bolsillos con red)
@@ -1255,19 +1305,24 @@ function paintTable() {
     c.strokeStyle = 'rgba(244,234,213,0.25)'; c.lineWidth = 1;
     for (let x = x1; x <= x2; x += 10) { c.beginPath(); c.moveTo(x, y1); c.lineTo(x, y2); c.stroke(); }
     for (let y = y1; y <= y2; y += 10) { c.beginPath(); c.moveTo(x1, y); c.lineTo(x2, y); c.stroke(); }
-    c.fillStyle = own ? PAL.maderaOsc : PAL.crema;
+    c.fillStyle = own ? th.frameDark : PAL.crema;
     c.font = `10px ${FONT_NUM}`; c.textAlign = 'center'; c.textBaseline = 'middle';
     c.fillText(own ? t('table.goalOwn') : t('table.goalRival'), (x1 + x2) / 2, own ? CH - 16 : 16);
   };
   pocket(GR.x1, GR.x2, 0, T.t, false); pocket(GO.x1, GO.x2, T.b, CH, true);
   // tapete
-  c.fillStyle = PAL.cancha; c.fillRect(T.l, T.t, T.r - T.l, T.b - T.t);
-  const bands = 14, bh = (T.b - T.t) / bands; c.fillStyle = 'rgba(14,77,44,0.28)';
+  c.fillStyle = th.turf; c.fillRect(T.l, T.t, T.r - T.l, T.b - T.t);
+  const bands = th.bands, bh = (T.b - T.t) / bands; c.fillStyle = th.band;
   for (let i = 1; i < bands; i += 2) c.fillRect(T.l, T.t + i * bh, T.r - T.l, bh);
   c.fillStyle = grainPattern(c); c.fillRect(T.l, T.t, T.r - T.l, T.b - T.t);
   if (OPT.colorblind) { c.fillStyle = hatchPattern(c); c.fillRect(T.l, T.t, T.r - T.l, T.b - T.t); }
   // líneas de cancha en crema
-  c.strokeStyle = 'rgba(244,234,213,0.55)'; c.lineWidth = 3;
+  if (th.spot) {                                       // canchas de noche: luz de focos sobre el centro
+    const g = c.createRadialGradient(CW / 2, CH / 2, 40, CW / 2, CH / 2, CH * 0.62);
+    g.addColorStop(0, 'rgba(255,248,214,0.16)'); g.addColorStop(1, 'rgba(0,0,0,0.22)');
+    c.fillStyle = g; c.fillRect(T.l, T.t, T.r - T.l, T.b - T.t);
+  }
+  c.strokeStyle = th.line; c.lineWidth = 3;
   c.strokeRect(T.l + 10, T.t + 10, T.r - T.l - 20, T.b - T.t - 20);
   const my = (T.t + T.b) / 2;
   c.beginPath(); c.moveTo(T.l + 10, my); c.lineTo(T.r - 10, my); c.stroke();
@@ -1278,7 +1333,7 @@ function paintTable() {
   // postes de los arcos
   for (const [x, y] of [[GR.x1, T.t], [GR.x2, T.t], [GO.x1, T.b], [GO.x2, T.b]]) { circle(c, x, y, 6); inkFill(c, PAL.crema, 3); }
   // esquinas de madera
-  for (const k of corners) { c.beginPath(); k.vertices.forEach((v, i) => i ? c.lineTo(v.x, v.y) : c.moveTo(v.x, v.y)); c.closePath(); inkFill(c, PAL.madera, 5); }
+  for (const k of corners) { c.beginPath(); k.vertices.forEach((v, i) => i ? c.lineTo(v.x, v.y) : c.moveTo(v.x, v.y)); c.closePath(); inkFill(c, th.frame, 5); }
   // barras propias y rivales: metal con reflejo blanco duro
   const rod = (y, own) => {
     c.fillStyle = 'rgba(26,20,35,0.35)'; c.fillRect(0, y + 3, CW, 5);
@@ -1355,12 +1410,22 @@ function drawDoll(s, tm) {
     circle(ctx, 0, 0, 25 + 3 * Math.sin(tm / 150)); ctx.fillStyle = 'rgba(244,234,213,0.35)'; ctx.fill();
     ctx.lineWidth = 3; ctx.strokeStyle = multColor(); ctx.setLineDash([5, 4]); ctx.lineDashOffset = -tm / 40; ctx.stroke(); ctx.setLineDash([]);
   }
+  // brillo del color de su familia: un destello al tocarlo y un halo suave mientras dura el tiro
+  const fcol = familyColor(DOLL[d.id].family), shp = DOLL[d.id].shape, R0 = shp.kind === 'rect' ? 26 : shp.r + 4;
+  const live = shot && (G.state === 'shooting' || G.state === 'settle') && shot.touched.has(d.uid);
+  const glow = Math.max(age < 0.9 ? Math.exp(-age * 4.5) : 0, live ? 0.32 : 0) * (OPT.reduceFlashes ? 0.55 : 1);
+  if (glow > 0.02 && !d.muted) {
+    const g = ctx.createRadialGradient(0, 0, R0 * 0.5, 0, 0, R0 * 2.5);
+    g.addColorStop(0, hexA(fcol, 0.9 * glow)); g.addColorStop(1, hexA(fcol, 0));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, R0 * 2.5, 0, Math.PI * 2); ctx.fill();
+    if (age < 0.5) { ctx.lineWidth = 3; ctx.strokeStyle = hexA(fcol, 1 - age * 2); ctx.beginPath(); ctx.arc(0, 0, R0 * (1 + age * 3.2), 0, Math.PI * 2); ctx.stroke(); }
+  }
   drawFigure(ctx, d.id, { tm, flash, dim: d.muted, turn: lookAt(d, s.x, s.y, tm) + k * 0.35,
     alpha: lifted ? 0.35 : 1 });
   ctx.restore();
   // estado "cargado" (manual: icono pequeño cuando crece o está marcado)
   if (d.muted) { drawWhistle(ctx, s.x + 12, s.y - 18, 12); drawCard(ctx, s.x - 14, s.y - 18, 12, PAL.amarillo, -0.2); }
-  if (d.id === 'ninamal') drawPtsChip(ctx, String(d.value), s.x, s.y - 30, 10);
+  if (d.id === 'ninamal' || d.id === 'canterano') drawPtsChip(ctx, String(d.value), s.x, s.y - 30, 10);
   if (d.captain) {                                   // cinta de capitán
     const R = (DOLL[d.id].shape.r || 12) + 2;
     ctx.beginPath(); ctx.arc(s.x, s.y, R, Math.PI * 0.55, Math.PI * 0.95); ctx.lineWidth = 6; ctx.strokeStyle = PAL.tinta; ctx.stroke();
@@ -1594,6 +1659,7 @@ function frame(tm) {
       const N = CFG.physics.substeps * warp, sim = dt * timeScale * warp;
       for (let i = 0; i < N; i++) { physicsStep(sim / N); if (hitstop > 0 || G.state !== 'shooting') break; }
       checkSlowmo();
+      if (G.state === 'shooting' && shot.t > MAX_SHOT + 4) for (const b of balls) { b.moving = false; Body.setVelocity(b.body, { x:0, y:0 }); }     // último recurso: el tiro se corta
       if (G.state === 'shooting' && shot.t > 0.05 && balls.every(b => !b.alive || !b.moving)) endShot();
       else if (shot && Math.floor(shot.t * 10) !== shot._tenth) { shot._tenth = Math.floor(shot.t * 10); updateShotbar(); }
     }
@@ -1640,7 +1706,7 @@ function frame(tm) {
 
 /* El tutorial se guarda como "visto" en el navegador. Cuando cambia su contenido se sube
    TUTORIAL_VERSION y a todos les vuelve a salir una vez. */
-const TUTORIAL_VERSION = 3;
+const TUTORIAL_VERSION = 4;
 function startGame() {
   if (PROFILE.tutorialVersion !== TUTORIAL_VERSION) {
     PROFILE.tutorialVersion = TUTORIAL_VERSION; PROFILE.tutorialDone = false; PROFILE.coachSeen = {}; saveProfile();
