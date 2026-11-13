@@ -51,7 +51,7 @@ function renderMenuUI() {
       '<button class="mBtn small" id="mCanchas" type="button">' + t('menu.canchas') + '<small>' + levelName(PROFILE.lastLevel || 1) + '</small></button>' +
       '<button class="mBtn small" id="mOpt" type="button">' + t('menu.options') + '</button></div>' +
     '</div>' +
-    '<div class="menuFoot"><span id="mToast" class="mNote" role="status" aria-live="polite"></span>' + (sv ? '<button class="mLink" id="mNew" type="button">' + t('menu.new') + '</button>' : '') + '<span class="mVer">v3.4</span></div>';
+    '<div class="menuFoot"><span id="mToast" class="mNote" role="status" aria-live="polite"></span>' + (sv ? '<button class="mLink" id="mNew" type="button">' + t('menu.new') + '</button>' : '') + '<span class="mVer">v3.9</span></div>';
   $('mPlay').onclick = () => { audio(); sv ? startContinue(sv) : startNew(); };
   if (sv) $('mNew').onclick = () => askNew();
   $('mAlbum').onclick = () => { audio(); openAlbum(); };

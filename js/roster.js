@@ -28,14 +28,14 @@
     { id:'poste', name:'El Poste', rarity:'comun', family:'sumador', price:2,
       shape:{ kind:'circle', r:10 }, rest:0.95, head:'poste', params:{ pts:20 } },   // r 7 → 10 (+43%); duplica en cada toque del tiro
     { id:'muro', name:'El Muro', rarity:'comun', family:'sumador', price:3,
-      shape:{ kind:'rect', w:46, h:20 }, rest:0.75, head:'rapado', params:{ pts:40 } },
+      shape:{ kind:'rect', w:46, h:20 }, rest:0.75, head:'rapado', params:{ pts:30 } },   // v3.8: 40 → 30 (paga en cada contacto)
     { id:'cambista', name:'El Cambista', rarity:'raro', family:'economia', price:6,
       shape:{ kind:'circle', r:15 }, rest:0.85, head:'cambio', params:{ plata:1 } },
     { id:'antena', name:'La Antena', rarity:'comun', family:'manipulador', price:2,
       shape:{ kind:'circle', r:14 }, rest:0.85, head:'antena', params:{ pts:12, radius:70, pull:9 } },
 
     { id:'lechero', name:'El Lechero', rarity:'comun', family:'sumador', price:3,
-      shape:{ kind:'circle', r:14 }, rest:0.85, head:'lechero', params:{ pts:30 } },
+      shape:{ kind:'circle', r:14 }, rest:0.85, head:'lechero', params:{ pts:50 } },   // v3.8: 30 → 50 (solo el primer toque del tiro)
     { id:'hincha', name:'El Hincha', rarity:'comun', family:'sumador', price:3,
       shape:{ kind:'circle', r:14 }, rest:0.85, head:'hincha', params:{ pts:15, bonus:15 } },
     { id:'corneta', name:'El Corneta', rarity:'comun', family:'manipulador', price:4,

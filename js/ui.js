@@ -976,7 +976,7 @@ window.addEventListener('keydown', e => { if (e.key === 'Escape' && $('dollMenu'
 
 /* ---------------- opciones (fase 7) ---------------- */
 function applyOptions() {
-  document.body.classList.toggle('cb', !!OPT.colorblind);
+  document.body.classList.toggle('cb', !!OPT.colorblind); document.body.classList.toggle('calm', !!OPT.reduceFlashes);
   document.documentElement.style.setProperty('--ts', OPT.textScale);
   tableDirty = true;
   if (typeof setVolumes === 'function') setVolumes();

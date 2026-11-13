@@ -447,7 +447,7 @@ function presentContact(bo, other, slot, n, impact, fx, power) {
     switch (f.type) {
       case 'pts': addPoints(f.v, px, py, f.src === 'wall'); gavePts = true; if (['poste', 'muro', 'ninamal', 'cabezon', 'canterano'].includes(f.src)) activated(f.src); break;
       case 'mult': addMult(f.v, px, py); multHit = true; activated(f.src); tipEvent('mult'); break;
-      case 'plata': activated(f.src || 'tendero'); G.plata += f.v; updateBoard(); popText('+' + f.v, px + 18, py + 14, 13, '#ffc93c', 'plata'); SFX.coin(); break;
+      case 'plata': activated(f.src || 'tendero'); G.plata += f.v; updateBoard(); popText('+' + f.v, px + 18, py + 14, 13, '#ffe14d', 'plata'); SFX.coin(); break;
       case 'tendero': popText(t('fx.tendero'), slot.x, slot.y - 30, 16, '#f4ead5', 'text'); break;
       case 'pirlo': bo.pirlo = Math.max(bo.pirlo, f.bounces); popText(t('fx.pirlito'), slot.x, slot.y - 30, 14, '#f4ead5', 'text'); break;
       case 'gambeta': bo.gambeta = true; break;
@@ -461,7 +461,7 @@ function presentContact(bo, other, slot, n, impact, fx, power) {
   if (kind === 'wall') {
     SFX.toc(pitch, impact); wallFlashes.push({ x:px, y:py, nx:n.x, ny:n.y, t:now() });
     if (other.plugin.post && impact > 2) {                // ¡PALO!: el balón pegó en el poste del arco
-      popText(t('fx.palo'), px, py + (py < CH / 2 ? 26 : -26), 17, '#f4ead5', 'text'); addShake(CFG.juice.shake * 2, 0.15); tone(980, 0.06, 'triangle', 0.14);
+      popText(t('fx.palo'), px, py + (py < CH / 2 ? 62 : -26), 17, '#f4ead5', 'text'); addShake(CFG.juice.shake * 2, 0.15); tone(980, 0.06, 'triangle', 0.14);   // en el arco de arriba nace más abajo: al subir no tapa la red
     }
   }
   else if (kind === 'rival') { SFX.clac(pitch, impact, true); const rv = rivals.find(r => r.body === other); if (rv) rv.hitT = now(); }
@@ -512,8 +512,14 @@ function onGoal(bo, which, pos) {
       hands.push({ x: pos.x, y: T.b - 10, t: now() });
       popText(t('fx.mano'), pos.x, T.b - 60, 24, '#f4ead5', 'text'); stats('mano', 1);
     } else if (f.type === 'goal') {
-      tipEvent('goal'); bigText(t('fx.goal'), '#f4ead5', 1200, '', { prio:'now' }); SFX.goal(); addShake(CFG.juice.shake * 9, CFG.juice.goalShakeMax);
+      const tier = goalTier();                         // 1 gol · 2 golazo chico · 3 golazo grande (según lo que ya promete el tiro)
+      tipEvent('goal'); bigText(t(tier === 3 ? 'fx.golazo' : tier === 2 ? 'fx.golGrande' : 'fx.goal'), '#f4ead5', 1200 + 250 * (tier - 1), '', { prio:'now' });
+      SFX.goal(); if (tier === 3) SFX.stinger();
+      addShake(CFG.juice.shake * (9 + 3 * (tier - 1)), CFG.juice.goalShakeMax + 0.1 * (tier - 1));
+      hitstop = Math.max(hitstop, 50 + 40 * tier);     // un micro-freno al entrar: el golpe se siente
       confetti(which === 'own' ? CW / 2 : pos.x, T.t, 1);
+      if (tier >= 2) confetti(which === 'own' ? CW / 2 : pos.x, T.t, 1);
+      celebrateGoal(bo, which, pos, tier);
     } else if (f.type === 'autogol') {
       if (shot.goal || balls.some(x => x.alive)) {       // con varios balones (Gemelo), si otro mete gol, vale el gol: no se castiga
         popText(t('fx.autogolMulti'), pos.x, T.b - 50, 15, '#f4ead5', 'text'); SFX.error();
@@ -553,7 +559,7 @@ function sparks(x, y, color, n, spd) {
 function confetti(x, y, dir, only) {
   const cols = ['#F4EAD5', '#C9803A', '#FFFFFF', '#7A4420', '#2B59C3', '#FF3D8B'];   // nunca cian/rojo/amarillo
   const n = OPT.reduceFlashes ? 25 : 90;
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < n && particles.length < 420; i++) {
     const a = (dir > 0 ? Math.PI / 2 : -Math.PI / 2) + (Math.random() - 0.5) * 2.2, v = 150 + Math.random() * 520;
     particles.push({ x, y, vx:Math.cos(a) * v, vy:Math.sin(a) * v, t:now(), life:900 + Math.random() * 900, color: only || cols[i % cols.length], size:3 + Math.random() * 3, drag:true });
   }
@@ -575,6 +581,90 @@ function flashLlaves(slot) {
   for (const s of G.slots) if (s.rod === slot.rod && Math.abs(s.i - slot.i) === 1 && s.doll && s.doll.id === 'llave') {
     s.doll.hitT = now(); s.doll.nx = 0; s.doll.ny = 1;
     links.push({ x1:slot.x, y1:slot.y, x2:s.x, y2:s.y, t:now() });
+  }
+}
+
+
+/* ===================== CELEBRACIÓN DE GOL (v3.7) =====================
+   Tres niveles según lo que el tiro ya promete al entrar (puntos × Mult × bonus de gol) frente a lo que falta para la meta:
+     1 gol normal · 2 golazo chico (rayos, más confeti, Don Chucho asoma) · 3 golazo grande (todo eso, más tiempo y frase de Don Chucho).
+   Todo es dibujo y no frena el juego, salvo los golazos, que dejan 0.35–0.75 s antes del conteo; tocar la pantalla lo salta. */
+const celebs = [];
+function goalTier() {
+  const proj = shot.points * shot.mult * CFG.scoring.goalBonus;
+  const need = Math.max(G.quota - G.total, 0.25 * Math.max(1, G.matchQuota || G.quota), 1);
+  return proj >= need ? 3 : proj >= 0.4 * need ? 2 : 1;
+}
+function coinBurst(x, y, n) {
+  for (let i = 0; i < n && particles.length < 420; i++)
+    particles.push({ x, y, vx:(Math.random() - 0.5) * 460, vy:80 + Math.random() * 360, g:700, coin:true, ph:Math.random() * 6, t:now(), life:1000 + Math.random() * 400, color:'#FFE14D', size:9 });
+}
+function celebrateGoal(bo, which, pos, tier) {
+  const t0 = now(), cx = which === 'own' ? CW / 2 : clamp(pos.x, GR.x1 + 12, GR.x2 - 12);
+  celebs.push({ kind:'net', t:t0, amp:5 + 3 * tier, cx });                      // la red se mueve
+  celebs.push({ kind:'ballnet', t:t0, x:cx, rot:(pos.x + pos.y) / 9 });                                   // el balón se queda un instante adentro
+  if (tier >= 2 && !OPT.reduceFlashes) celebs.push({ kind:'rays', t:t0, x:cx, tier });
+  if (tier >= 2 && !shot.cameo) { shot.cameo = true; celebs.push({ kind:'chucho', t:t0, tier, line: tier === 3 ? t('fx.chucho' + (1 + Math.floor(Math.random() * 4))) : '' }); }   // un solo Don Chucho por tiro, aunque entren dos balones
+  if (shot.plata > 0) coinBurst(cx, T.t + 8, Math.min(16, 4 + Math.round(shot.plata * 2)));   // la plata sale de la red
+  // la barra del último que tocó el balón da la vuelta (como en un futbolín de verdad)
+  const last = shot.lastOwn.get(bo.id), uid = last ? last.uid : ([...shot.touched.keys()].pop());
+  const sl = G.slots.find(s => s.doll && s.doll.uid === uid);
+  if (sl) for (const s of G.slots) if (s.doll && s.rod === sl.rod) { s.doll.celebT = t0 + Math.abs(s.i - sl.i) * 70; s.doll.celebTier = tier; }
+  shot.celebHold = tier === 3 ? 750 : tier === 2 ? 350 : 0;
+}
+function spinOf(d, tm) {                      // {turn, scale} de la vuelta de celebración de un muñeco
+  if (!d.celebT) return null;
+  const p = (tm - d.celebT) / (650 + 250 * d.celebTier);
+  if (p < 0) return null;
+  if (p >= 1) { d.celebT = 0; return null; }
+  const e = 1 - Math.pow(1 - p, 3);
+  return { turn: e * Math.PI * 2 * d.celebTier, scale: 1 + 0.16 * d.celebTier * Math.sin(Math.PI * p) };
+}
+function drawCelebrations(tm, layer) {      // layer 'mesa': red, balón y rayos (bajo el confeti) · 'hud': Don Chucho (fuera del zoom)
+  celebs.sort((a, b) => (a.kind === 'net' ? 0 : 1) - (b.kind === 'net' ? 0 : 1));   // las redes primero, el balón y lo demás encima (también con dos goles)
+  for (let i = 0; i < celebs.length; i++) {
+    const c = celebs[i], age = tm - c.t;
+    if ((c.kind === 'chucho') !== (layer === 'hud')) continue;
+    if (c.kind === 'net') {
+      const a = age / 1100; if (a > 1) { celebs.splice(i--, 1); continue; }
+      const amp = c.amp * (1 - a) * (1 - a), ph = age / 55;
+      // misma red que la pintada (fondo tinta, hilos crema cada 10 px): solo se mueve y brilla un poco más, y termina igual a la quieta
+      ctx.save(); ctx.beginPath(); ctx.rect(GR.x1, 0, GR.x2 - GR.x1, T.t); ctx.clip();
+      ctx.fillStyle = PAL.tinta; ctx.fillRect(GR.x1, 0, GR.x2 - GR.x1, T.t);
+      ctx.strokeStyle = `rgba(244,234,213,${0.25 + 0.4 * (1 - a)})`; ctx.lineWidth = 1 + 0.4 * (1 - a);
+      for (let x = GR.x1; x <= GR.x2; x += 10) {
+        ctx.beginPath();
+        for (let y = 0; y <= T.t; y += 4) { const dx = amp * Math.sin(y * 0.35 - ph) * Math.exp(-Math.abs(x - c.cx) / 60); y ? ctx.lineTo(x + dx, y) : ctx.moveTo(x + dx, y); }
+        ctx.stroke();
+      }
+      for (let y = 0; y <= T.t; y += 10) {
+        ctx.beginPath();
+        for (let x = GR.x1; x <= GR.x2; x += 4) { const dy = amp * 0.8 * Math.sin(x * 0.3 - ph) * Math.exp(-Math.abs(x - c.cx) / 60); x > GR.x1 ? ctx.lineTo(x, y + dy) : ctx.moveTo(x, y + dy); }
+        ctx.stroke();
+      }
+      ctx.fillStyle = PAL.crema; ctx.font = `10px ${FONT_NUM}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(t('table.goalRival'), (GR.x1 + GR.x2) / 2, 16);
+      ctx.restore();
+    } else if (c.kind === 'ballnet') {
+      const a = age / 950; if (a > 1) { celebs.splice(i--, 1); continue; }
+      const sq = 1 - 0.2 * Math.exp(-age / 90) * Math.cos(age / 28), y = T.t - BALL_R - 3 + 3 * Math.sin(age / 70) * (1 - a);
+      ctx.save(); ctx.globalAlpha = a > 0.75 ? (1 - a) / 0.25 : 1; ctx.translate(c.x, y); ctx.scale(1 / sq, sq);
+      ballArt(ctx, 0, 0, c.rot || 0);
+      ctx.restore();
+    } else if (c.kind === 'rays') {
+      const a = age / 650; if (a > 1) { celebs.splice(i--, 1); continue; }
+      const e = 1 - Math.pow(1 - a, 2);
+      ctx.save(); ctx.translate(c.x, T.t); ctx.globalAlpha = 0.3 * (1 - a) * (c.tier === 3 ? 1.2 : 1); ctx.fillStyle = PAL.crema;
+      for (let k = 0; k < 16; k += 2) { ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, 60 + CH * 0.6 * e, k * Math.PI / 8, (k + 1) * Math.PI / 8); ctx.closePath(); ctx.fill(); }
+      ctx.restore();
+    } else if (c.kind === 'chucho') {
+      const dur = 1700, a = age / dur; if (a > 1) { celebs.splice(i--, 1); continue; }
+      const w = 150, h = 175, rise = a < 0.18 ? 1 - Math.pow(1 - a / 0.18, 3) : a > 0.8 ? 1 - Math.pow((a - 0.8) / 0.2, 2) : 1;
+      ctx.save(); ctx.translate(8, CH - h * rise + (a < 0.18 ? 0 : 3 * Math.sin(age / 110)));
+      drawChucho(ctx, w, h, { eyes:'wide', party: c.tier === 3, arm: { a: 2.5 + 0.35 * Math.sin(age / 90) } });
+      ctx.restore();
+      if (c.line && rise > 0.9) plateText(ctx, c.line, Math.max(150, 8 + w * 0.55), CH - h - 8, 19, PAL.crema, FONT_TXT);
+    }
   }
 }
 
@@ -633,8 +723,11 @@ function endShot() {
   // "¡Casi!": un balón quedó quieto al lado del arco rival
   if (!shot.goal && balls.some(b => b.alive && b.body.position.y < T.t + 70 && b.body.position.x > GR.x1 - 30 && b.body.position.x < GR.x2 + 30))
     bigText(t('fx.almost'), '#f4ead5', 900, '', { small:true });
-  setTimeout(scoreShot, shot.goal || shot.autogol ? 150 : 220);
+  clearTimeout(scoreTimer);
+  scoreTimer = setTimeout(scoreShot, shot.goal ? 150 + (shot.celebHold || 0) : shot.autogol ? 150 : 220);   // los golazos dejan lucir la celebración; tocar la pantalla la salta
 }
+let scoreTimer = null;
+document.addEventListener('pointerdown', () => { if (scoreTimer && G.state === 'settle' && shot && shot.celebHold) { clearTimeout(scoreTimer); scoreTimer = null; scoreShot(); } }, true);
 
 function stepLabel(st) {
   switch (st.key) {
@@ -647,6 +740,7 @@ function stepLabel(st) {
   }
 }
 async function scoreShot() {
+  scoreTimer = null;
   G.state = 'scoring'; G.fast = OPT.fast;
   G.kanteSpent = (G.kanteSpent || 0) + Math.max(0, (shot.kanteStart || 0) - shot.kanteLeft);   // Kan-Té ya rescató en este partido
   const s = shot, R = SC.resolve(shot, CFG), tally = $('tally');
@@ -713,7 +807,7 @@ async function scoreShot() {
     G.plata = Math.max(0, G.plata - R.penalty); updateBoard(); SFX.error();
     for (const uid of s.calientes) if (!s.touched.has(uid)) {
       const sl = G.slots.find(x => x.doll && x.doll.uid === uid);
-      if (sl) { sl.doll.hitT = now(); popText('-' + dc('caliente').penalty, sl.x, sl.y - 26, 16, '#FFC93C', 'plata'); }
+      if (sl) { sl.doll.hitT = now(); popText('-' + dc('caliente').penalty, sl.x, sl.y - 26, 16, '#FFE14D', 'plata'); }
     }
   } else if (s.justiciero && s.calientes.some(uid => !s.touched.has(uid))) activated('justiciero');
   await wait(final > 0 ? 200 : 80);
@@ -726,7 +820,7 @@ async function scoreShot() {
   if (before < G.quota && G.total >= G.quota) {
     G.reachedQuota = true; G.wonOnLastShot = G.shotsLeft === 0; G.wonOnFirstShot = G.shotsTaken === 1;
     $('board').classList.add('victory'); SFX.victory();
-    bigText(t('fx.quota'), '#FFC93C', 1300);
+    bigText(t('fx.quota'), '#FFE14D', 1300);
     await wait(650);
   }
   saveRun();                                                  // el tiro ya sumó: este es el nuevo punto de continuar
@@ -1023,7 +1117,7 @@ function sellSlot(slot) {
   if (!EC.canSell(d)) return noSell();
   const back = EC.sellValue(d);
   G.plata += back; LOG.shop({ type:'sell', id: slot.doll.id, back }); slot.doll = null; rebuildDolls();
-  SFX.caja(1); popText('+' + back, slot.x, slot.y - 20, 16, '#FFC93C', 'plata');
+  SFX.caja(1); popText('+' + back, slot.x, slot.y - 20, 16, '#FFE14D', 'plata');
   updateBoard(); renderSide();
 }
 function sellBench(i) {
@@ -1420,7 +1514,9 @@ function drawDoll(s, tm) {
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, R0 * 2.5, 0, Math.PI * 2); ctx.fill();
     if (age < 0.5) { ctx.lineWidth = 3; ctx.strokeStyle = hexA(fcol, 1 - age * 2); ctx.beginPath(); ctx.arc(0, 0, R0 * (1 + age * 3.2), 0, Math.PI * 2); ctx.stroke(); }
   }
-  drawFigure(ctx, d.id, { tm, flash, dim: d.muted, turn: lookAt(d, s.x, s.y, tm) + k * 0.35,
+  const cel = spinOf(d, tm);                                          // vuelta de celebración tras un gol
+  if (cel) ctx.scale(cel.scale, cel.scale);
+  drawFigure(ctx, d.id, { tm, flash, dim: d.muted, turn: lookAt(d, s.x, s.y, tm) + k * 0.35 + (cel ? cel.turn : 0),
     alpha: lifted ? 0.35 : 1 });
   ctx.restore();
   // estado "cargado" (manual: icono pequeño cuando crece o está marcado)
@@ -1429,8 +1525,9 @@ function drawDoll(s, tm) {
   if (d.captain) {                                   // cinta de capitán
     const R = (DOLL[d.id].shape.r || 12) + 2;
     ctx.beginPath(); ctx.arc(s.x, s.y, R, Math.PI * 0.55, Math.PI * 0.95); ctx.lineWidth = 6; ctx.strokeStyle = PAL.tinta; ctx.stroke();
-    ctx.lineWidth = 4; ctx.strokeStyle = PAL.oro; ctx.stroke();
-    plateText(ctx, 'C', s.x - R * 0.85, s.y + R * 0.75, 9, PAL.oro);
+    ctx.lineWidth = 4; ctx.strokeStyle = PAL.esmeralda; ctx.stroke();            // esmeralda = legendario (la da El Capitán)
+    ctx.lineWidth = 1.6; ctx.strokeStyle = PAL.esmeraldaLuz; ctx.stroke();
+    plateText(ctx, 'C', s.x - R * 0.85, s.y + R * 0.75, 9, PAL.esmeralda);
   }
   if (d.id === 'costurera' && SC.isActive(d)) {       // hilo entre los vecinos si son de la misma familia
     const a = G.slots.find(x => x.rod === s.rod && x.i === s.i - 1), b = G.slots.find(x => x.rod === s.rod && x.i === s.i + 1);
@@ -1489,6 +1586,16 @@ function drawRivals(tm) {
     ctx.restore();
   }
 }
+/* El balón (blanco, contorno de tinta, 5 parches y pentágono): el mismo en juego y dentro de la red */
+function ballArt(c, x, y, rot) {
+  circle(c, x, y, BALL_R); inkFill(c, '#FFFFFF', 3);
+  c.save(); circle(c, x, y, BALL_R - 1.5); c.clip();
+  c.fillStyle = PAL.tinta;
+  for (let i = 0; i < 5; i++) { const a = rot + i * Math.PI * 2 / 5; circle(c, x + Math.cos(a) * 8, y + Math.sin(a) * 8, 2.6); c.fill(); }
+  c.beginPath(); for (let i = 0; i < 5; i++) { const a = rot + i * Math.PI * 2 / 5 + 0.6; const px = x + Math.cos(a) * 3.6, py = y + Math.sin(a) * 3.6; i ? c.lineTo(px, py) : c.moveTo(px, py); } c.closePath(); c.fill();
+  c.restore();
+  c.beginPath(); c.arc(x - 3, y - 3, 4, Math.PI, Math.PI * 1.5); c.lineWidth = 2; c.strokeStyle = '#ffffff'; c.stroke();
+}
 function drawBalls(tm) {
   for (const bo of balls) {
     if (!bo.alive) continue;
@@ -1501,14 +1608,7 @@ function drawBalls(tm) {
       circle(ctx, q.x, q.y, BALL_R * (0.35 + 0.6 * a)); ctx.fill();
     });
     ctx.fillStyle = 'rgba(26,20,35,0.35)'; circle(ctx, p.x + 3, p.y + 4, BALL_R); ctx.fill();
-    circle(ctx, p.x, p.y, BALL_R); inkFill(ctx, '#FFFFFF', 3);
-    ctx.save(); circle(ctx, p.x, p.y, BALL_R - 1.5); ctx.clip();
-    const rot = (p.x + p.y) / 9;                        // parches que ruedan
-    ctx.fillStyle = PAL.tinta;
-    for (let i = 0; i < 5; i++) { const a = rot + i * Math.PI * 2 / 5; circle(ctx, p.x + Math.cos(a) * 8, p.y + Math.sin(a) * 8, 2.6); ctx.fill(); }
-    ctx.beginPath(); for (let i = 0; i < 5; i++) { const a = rot + i * Math.PI * 2 / 5 + 0.6; const x = p.x + Math.cos(a) * 3.6, y = p.y + Math.sin(a) * 3.6; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.closePath(); ctx.fill();
-    ctx.restore();
-    ctx.beginPath(); ctx.arc(p.x - 3, p.y - 3, 4, Math.PI, Math.PI * 1.5); ctx.lineWidth = 2; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+    ballArt(ctx, p.x, p.y, (p.x + p.y) / 9);           // parches que ruedan
     if (bo.pirlo > 0) { circle(ctx, p.x, p.y, BALL_R + 4); ctx.strokeStyle = 'rgba(244,234,213,0.7)'; ctx.lineWidth = 2; ctx.stroke(); }
   }
 }
@@ -1582,11 +1682,18 @@ function drawFx(tm, dt) {
     ctx.save(); ctx.translate(h.x, y); ctx.rotate(-0.2 + 0.4 * Math.sin(a * 8)); ctx.globalAlpha = a > 0.8 ? (1 - a) / 0.2 : 1;
     hand(ctx, 34); ctx.restore(); ctx.globalAlpha = 1;
   }
+  drawCelebrations(tm, 'mesa');
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i], a = (tm - p.t) / p.life; if (a > 1) { particles.splice(i, 1); continue; }
     if (p.drag) { p.vx *= Math.pow(0.12, sec); p.vy *= Math.pow(0.12, sec); }
+    if (p.g) p.vy += p.g * sec;
     p.x += p.vx * sec; p.y += p.vy * sec;
-    ctx.globalAlpha = 1 - a; ctx.fillStyle = p.color;
+    ctx.globalAlpha = a > 0.7 ? (1 - a) / 0.3 : 1; ctx.fillStyle = p.color;
+    if (p.coin) {                                                   // moneda que gira: el amarillo es plata, solo sale con plata
+      ctx.save(); ctx.translate(p.x, p.y); ctx.scale(Math.max(0.12, Math.abs(Math.cos(p.ph + (tm - p.t) / 70))), 1);
+      circle(ctx, 0, 0, p.size); inkFill(ctx, p.color, 2.2); circle(ctx, 0, 0, p.size * 0.55); ctx.lineWidth = 1.4; ctx.strokeStyle = PAL.tinta; ctx.stroke(); ctx.restore(); continue;
+    }
+    ctx.globalAlpha = 1 - a;
     ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
   }
   ctx.globalAlpha = 1;
@@ -1599,7 +1706,15 @@ function drawFx(tm, dt) {
     const b = bigCur, age = tm - b.t, a = age / b.life;
     if (a > 1) bigCur = null;
     else if (!(blocked && b.prio !== 'now')) {
-      const fs = b.small ? 30 : 52, cy = CH * 0.45;
+      const fs = b.small ? 30 : 52;
+      // con el conteo a la vista (gol, autogol), el letrero sube y queda justo encima del panel en vez de quedar tapado
+      let cyT = CH * 0.45;
+      if ($('tally').classList.contains('show')) {
+        const tr = $('tally').getBoundingClientRect(), cr = canvas.getBoundingClientRect();
+        if (cr.width) cyT = clamp((tr.top - cr.top) * CW / cr.width - fs * 0.8, fs + 12, cyT);
+      }
+      b.y = b.y === undefined ? cyT : b.y + (cyT - b.y) * Math.min(1, dt / 60);
+      const cy = b.y;
       const s = age < 180 ? 2.1 - 1.1 * (age / 180) : 1 + 0.05 * a;
       ctx.save(); ctx.translate(CW / 2, cy); ctx.scale(s, s); ctx.rotate(-0.06);
       ctx.globalAlpha = a > 0.75 ? (1 - a) / 0.25 : 1;
@@ -1701,6 +1816,7 @@ function frame(tm) {
   }
   const rf = (tm - redFlash) / 500;
   if (rf < 1) { ctx.fillStyle = `rgba(230,57,70,${0.25 * (1 - rf)})`; ctx.fillRect(0, 0, CW, CH); }
+  drawCelebrations(tm, 'hud');
   requestAnimationFrame(frame);
 }
 

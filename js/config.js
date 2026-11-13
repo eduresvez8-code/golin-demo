@@ -134,6 +134,8 @@
   const DEFAULTS = buildDefaults();
   const CFG = clone(DEFAULTS);
   try { if (store()) mergeKnown(CFG, JSON.parse(store().getItem(STORAGE_KEY) || '{}')); } catch (e) {}
+  /* v3.7: la cámara lenta al acercarse a un arco vuelve a sus valores por defecto una vez, aunque el debug la hubiera apagado */
+  try { if (store() && !store().getItem('golinSlowmoBack')) { CFG.juice.slowmoDur = DEFAULTS.juice.slowmoDur; CFG.juice.slowmoScale = DEFAULTS.juice.slowmoScale; store().setItem('golinSlowmoBack', '1'); } } catch (e) {}
 
   /* Se guardan solo las diferencias con los valores por defecto: así, si el juego cambia un valor
      por defecto, te llega el nuevo salvo que tú lo hayas tocado a mano en el debug. */

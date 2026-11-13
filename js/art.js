@@ -4,21 +4,23 @@
    plano (un tono), sombra abajo a la derecha, reflejo blanco duro en
    metales. Muñecos: camiseta crema/roja; cada uno con una silueta de
    cabeza única (se reconocen aunque todo fuera negro). Sin caras.
-   Rarezas por MATERIAL del borde: Común sin borde · Raro plateado ·
-   Especial arabesco de chiva · Legendario dorado animado.
+   Rarezas por MATERIAL de la peana: Común madera · Raro plata ·
+   Especial dorado brillante · Legendario esmeralda con facetas.
    ===================================================================== */
 'use strict';
 const PAL = {
   cancha:'#1F8A4C', noche:'#0E4D2C', madera:'#C9803A', maderaOsc:'#7A4420', crema:'#F4EAD5',
-  tinta:'#1A1423', cian:'#2EC4B6', rojo:'#E63946', magenta:'#FF3D8B', amarillo:'#FFC93C', azul:'#2B59C3',
-  plata:'#B8C0CC', plataOsc:'#7D8694', oro:'#D4A017', oroOsc:'#8C6A0C',
+  tinta:'#1A1423', cian:'#2EC4B6', rojo:'#E63946', magenta:'#FF3D8B', amarillo:'#FFE14D', azul:'#2B59C3',
+  plata:'#B8C0CC', plataOsc:'#7D8694', oro:'#B8860B', oroOsc:'#8A6408', oroLuz:'#E8B923', rojoTxt:'#FF6B76', azulTxt:'#6F95F0',
+  // esmeralda = Legendario (v3.9). Nunca plana: facetas oscura/clara, brillo blanco y contorno de tinta grueso
+  esmeralda:'#2EE6A0', esmeraldaOsc:'#0F8F63', esmeraldaLuz:'#B4F8DD',
   piel:'#B9774A', pielOsc:'#8A5230', pelo:'#1A1423',
   // camiseta propia: crema con franjas rojas (el rojo de equipo, no el de Mult)
   camisa:'#F4EAD5', franja:'#B8313C', rivalRaya:'#1E3F8C',
 };
 /* Color de cada familia: es el brillo que da el muñeco cuando el balón lo toca y el punto de color de su carta.
    Sumador, Multiplicador y Economía usan el color de lo que dan (cian puntos, rojo Mult, amarillo plata). */
-const FAMILY_COLOR = { sumador:'#2EC4B6', multiplicador:'#E63946', economia:'#FFC93C', manipulador:'#FF3D8B', posicional:'#B6E83A', escalador:'#A56BFF', condicional:'#FF9A3C' };
+const FAMILY_COLOR = { sumador:'#2EC4B6', multiplicador:'#E63946', economia:'#FFE14D', manipulador:'#FF3D8B', posicional:'#B6E83A', escalador:'#A56BFF', condicional:'#FF9A3C' };
 const familyColor = f => {
   const cb = typeof OPT !== 'undefined' && OPT.colorblind;                 // modo daltónico: el rojo pasa a magenta y el magenta a blanco
   if (cb && f === 'multiplicador') return '#FF3D8B';
@@ -32,7 +34,7 @@ const LEVEL_THEMES = {
   2: { name:'barrio',  frame:'#B5573B', frameDark:'#6E2F1E', vein:'rgba(60,22,12,0.5)',   turf:'#8A8478', band:'rgba(40,38,34,0.22)',  bands:6,  line:'rgba(244,234,213,0.7)',  bg:'#2F2B26' },
   3: { name:'liga',    frame:'#C8CED8', frameDark:'#7D8694', vein:'rgba(70,78,92,0.45)',  turf:'#2BA862', band:'rgba(10,70,36,0.38)',  bands:10, line:'rgba(255,255,255,0.8)',  bg:'#0C4A2E' },
   4: { name:'clasico', frame:'#5A331A', frameDark:'#2B170A', vein:'rgba(20,10,4,0.55)',   turf:'#15663A', band:'rgba(0,0,0,0.26)',     bands:14, line:'rgba(244,234,213,0.5)',  bg:'#08241A', spot:true },
-  5: { name:'final',   frame:'#D4A017', frameDark:'#8C6A0C', vein:'rgba(110,80,6,0.5)',   turf:'#17793F', band:'rgba(5,50,26,0.3)',    bands:12, line:'rgba(242,217,138,0.85)', bg:'#2A2208', spot:true },
+  5: { name:'final',   frame:'#B8860B', frameDark:'#8A6408', vein:'rgba(110,80,6,0.5)',   turf:'#17793F', band:'rgba(5,50,26,0.3)',    bands:12, line:'rgba(242,217,138,0.85)', bg:'#2A2208', spot:true },
 };
 const themeOf = level => LEVEL_THEMES[level] || LEVEL_THEMES[1];
 const FONT_NUM = '"Bungee", "Impact", system-ui, sans-serif';
@@ -50,16 +52,57 @@ function circle(c, x, y, r) { c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); }
 function inkFill(c, fill, lw) { c.fillStyle = fill; c.fill(); c.lineWidth = lw; c.strokeStyle = PAL.tinta; c.stroke(); }
 
 /* ---------------- peana (base) según la rareza ----------------
-   La rareza se lee por el MATERIAL de la peana donde está parado el muñeco:
-   Común madera · Raro metal con remaches · Especial pintada tipo chiva · Legendario dorada con brillo.
+   La rareza se lee por el MATERIAL de la peana donde está parado el muñeco (v3.9):
+   Común madera · Raro plata con remaches · Especial dorado brillante · Legendario esmeralda tallada.
+   La esmeralda no es redonda (talla octogonal), lleva facetas, brillos que titilan y un contorno más grueso:
+   sobre la mesa verde se distingue por forma y brillo, no solo por color.
    Los rivales van sobre una peana azul oscura, sin rareza. */
+function gemPath(c, cy, rx, ry, k = 1) {               // octágono de talla esmeralda (esquinas cortadas)
+  const a = rx * k, b = ry * k, ca = a * 0.34, cb = b * 0.5;
+  return [[-a + ca, cy - b], [a - ca, cy - b], [a, cy - b + cb], [a, cy + b - cb], [a - ca, cy + b], [-a + ca, cy + b], [-a, cy + b - cb], [-a, cy - b + cb]];
+}
+function pathPts(c, pts) { c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])); c.closePath(); }
+function twinkle(c, px, py, sz) {                       // destello de 4 puntas
+  c.beginPath(); c.moveTo(px, py - sz); c.lineTo(px + sz * 0.25, py); c.lineTo(px, py + sz); c.lineTo(px - sz * 0.25, py); c.closePath();
+  c.moveTo(px - sz, py); c.lineTo(px, py + sz * 0.25); c.lineTo(px + sz, py); c.lineTo(px, py - sz * 0.25); c.closePath();
+  c.fillStyle = '#ffffff'; c.fill();
+}
+function drawGemBase(c, R, rx, ry, cy, tm) {
+  const lw = Math.max(2.6, R * 0.2);                    // contorno de tinta grueso
+  const out = gemPath(c, cy, rx, ry), inn = gemPath(c, cy - ry * 0.04, rx, ry, 0.58);
+  c.fillStyle = 'rgba(26,20,35,0.35)'; pathPts(c, gemPath(c, cy + R * 0.3, rx, ry).map(p => [p[0] + R * 0.18, p[1]])); c.fill();   // sombra dura
+  pathPts(c, gemPath(c, cy + R * 0.18, rx, ry)); c.fillStyle = PAL.esmeraldaOsc; c.fill(); c.lineWidth = lw; c.strokeStyle = PAL.tinta; c.stroke();   // canto
+  // facetas: la luz viene de arriba a la izquierda (clara), abajo a la derecha en sombra (oscura)
+  const tone = [PAL.esmeraldaLuz, PAL.esmeralda, PAL.esmeralda, PAL.esmeraldaOsc, PAL.esmeraldaOsc, PAL.esmeralda, PAL.esmeraldaLuz, PAL.esmeraldaLuz];
+  for (let i = 0; i < 8; i++) {
+    const j = (i + 1) % 8;
+    pathPts(c, [out[i], out[j], inn[j], inn[i]]); c.fillStyle = tone[i]; c.fill();
+    c.lineWidth = Math.max(0.8, R * 0.05); c.strokeStyle = 'rgba(26,20,35,0.45)'; c.stroke();
+  }
+  pathPts(c, inn); c.fillStyle = PAL.esmeralda; c.fill(); c.lineWidth = Math.max(0.8, R * 0.05); c.strokeStyle = 'rgba(26,20,35,0.45)'; c.stroke();   // la mesa de la piedra
+  c.save(); pathPts(c, inn); c.clip();
+  c.fillStyle = PAL.esmeraldaLuz; c.beginPath(); c.moveTo(inn[7][0], inn[7][1]); c.lineTo(inn[0][0], inn[0][1]); c.lineTo(inn[0][0] + rx * 0.5, inn[0][1]); c.lineTo(inn[7][0] + rx * 0.2, inn[6][1]); c.lineTo(inn[6][0], inn[6][1]); c.closePath(); c.globalAlpha = 0.55; c.fill(); c.globalAlpha = 1;
+  c.restore();
+  // reflejo blanco duro fijo (aunque los destellos se apaguen, nunca queda plana)
+  c.lineCap = 'round'; c.beginPath(); c.moveTo(out[7][0] + rx * 0.14, out[7][1] - ry * 0.02); c.lineTo(out[0][0] + rx * 0.05, out[0][1] + ry * 0.22);
+  c.lineWidth = Math.max(1.2, R * 0.12); c.strokeStyle = '#ffffff'; c.stroke(); c.lineCap = 'butt';
+  pathPts(c, out); c.lineWidth = lw; c.strokeStyle = PAL.tinta; c.stroke();
+  // brillos blancos que titilan (más quietos con "Reducir destellos")
+  const calm = typeof OPT !== 'undefined' && OPT.reduceFlashes;
+  for (const [k, px, py, s] of [[0, -rx * 0.98, cy - ry * 0.55, 0.32], [1.7, rx * 0.96, cy + ry * 0.25, 0.28], [3.4, -rx * 0.15, cy - ry * 0.35, 0.2]]) {
+    const tw = calm ? 0.75 : 0.5 + 0.5 * Math.sin(tm / 260 + k * 3);
+    if (tw < 0.25) continue;
+    twinkle(c, px, py, R * s * tw);
+  }
+}
 function drawBase(c, rarity, R, rect, tm, rival) {
   const rx = rect ? rect.w / 2 + R * 0.45 : R * 1.22, ry = R * 0.62, cy = R * 0.46, lw = Math.max(2, R * 0.14);
+  if (rarity === 'legendario' && !rival) return drawGemBase(c, R, rx, ry, cy, tm || 0);
   const disc = (dy = 0, sx = 1) => { c.beginPath(); c.ellipse(0, cy + dy, rx * sx, ry * sx, 0, 0, Math.PI * 2); };
   // canto de la peana (da volumen) y sombra plana abajo a la derecha
   c.fillStyle = 'rgba(26,20,35,0.35)'; c.beginPath(); c.ellipse(R * 0.18, cy + R * 0.3, rx, ry, 0, 0, Math.PI * 2); c.fill();
-  const top = rival ? '#27437F' : rarity === 'raro' ? PAL.plata : rarity === 'especial' ? PAL.crema : rarity === 'legendario' ? PAL.oro : PAL.madera;
-  const edge = rival ? '#16275A' : rarity === 'raro' ? PAL.plataOsc : rarity === 'especial' ? PAL.noche : rarity === 'legendario' ? PAL.oroOsc : PAL.maderaOsc;
+  const top = rival ? '#27437F' : rarity === 'raro' ? PAL.plata : rarity === 'especial' ? PAL.oroLuz : PAL.madera;
+  const edge = rival ? '#16275A' : rarity === 'raro' ? PAL.plataOsc : rarity === 'especial' ? PAL.oro : PAL.maderaOsc;
   disc(R * 0.16); c.fillStyle = edge; c.fill(); c.lineWidth = lw; c.strokeStyle = PAL.tinta; c.stroke();
   disc(0); c.fillStyle = top; c.fill(); c.lineWidth = lw; c.strokeStyle = PAL.tinta; c.stroke();
   c.save(); disc(0); c.clip();
@@ -70,36 +113,23 @@ function drawBase(c, rarity, R, rect, tm, rival) {
   } else if (rarity === 'raro') {                        // remaches + reflejo duro
     for (const a of [0.15, 0.85, 1.15, 1.85]) { circle(c, Math.cos(a * Math.PI) * rx * 0.8, cy + Math.sin(a * Math.PI) * ry * 0.72, R * 0.09); c.fillStyle = PAL.plataOsc; c.fill(); }
     c.beginPath(); c.ellipse(0, cy, rx * 0.86, ry * 0.8, 0, Math.PI * 1.15, Math.PI * 1.45); c.lineWidth = R * 0.12; c.strokeStyle = '#ffffff'; c.stroke();
-  } else if (rarity === 'especial') {                    // toldo de tienda de barrio: franjas verde y crema
-    const n = 7, w = rx * 2 / n;
-    for (let i = 0; i < n; i += 2) { c.fillStyle = PAL.cancha; c.fillRect(-rx + i * w, cy - ry, w, ry * 2); }
-    c.beginPath(); c.ellipse(0, cy, rx * 0.86, ry * 0.8, 0, Math.PI * 1.15, Math.PI * 1.45); c.lineWidth = R * 0.1; c.strokeStyle = '#ffffff'; c.stroke();
-  } else if (rarity === 'legendario') {                  // oro con brillo que recorre y destellos
-    const a = (tm / 650) % (Math.PI * 2);
-    c.beginPath(); c.ellipse(0, cy, rx * 0.8, ry * 0.74, 0, a, a + 0.9); c.lineWidth = R * 0.16; c.strokeStyle = '#ffffff'; c.stroke();
-    c.beginPath(); c.ellipse(0, cy, rx * 0.8, ry * 0.74, 0, Math.PI * 0.1, Math.PI * 0.9); c.lineWidth = R * 0.1; c.strokeStyle = PAL.oroOsc; c.stroke();
+  } else if (rarity === 'especial') {                    // dorado brillante: canto de oro viejo, sombra dura abajo y brillo blanco
+    c.beginPath(); c.ellipse(0, cy, rx * 0.8, ry * 0.74, 0, Math.PI * 0.12, Math.PI * 0.88); c.lineWidth = R * 0.12; c.strokeStyle = PAL.oro; c.stroke();
+    c.beginPath(); c.ellipse(0, cy, rx * 0.84, ry * 0.78, 0, Math.PI * 1.12, Math.PI * 1.48); c.lineWidth = R * 0.14; c.strokeStyle = '#ffffff'; c.stroke();
+    circle(c, rx * 0.5, cy - ry * 0.5, R * 0.07); c.fillStyle = '#ffffff'; c.fill();
   }
   c.restore();
-  if (rarity === 'legendario' && !rival) {               // destellos de 4 puntas que titilan
-    for (const [k, px, py] of [[0, -rx * 0.95, cy - ry * 0.5], [1.7, rx * 0.95, cy + ry * 0.2]]) {
-      const tw = 0.5 + 0.5 * Math.sin(tm / 260 + k * 3);
-      if (tw < 0.25) continue;
-      const sz = R * 0.28 * tw;
-      c.beginPath(); c.moveTo(px, py - sz); c.lineTo(px + sz * 0.25, py); c.lineTo(px, py + sz); c.lineTo(px - sz * 0.25, py); c.closePath();
-      c.moveTo(px - sz, py); c.lineTo(px, py + sz * 0.25); c.lineTo(px + sz, py); c.lineTo(px, py - sz * 0.25); c.closePath();
-      c.fillStyle = '#ffffff'; c.fill();
-    }
-  }
 }
 /* compatibilidad: el nombre viejo */
 function drawRarityRing(c, rarity, R, tm, rect) { drawBase(c, rarity, R, rect, tm, false); }
 
 /* ---------------- cuerpo: hombros con camiseta, brazos, pantaloneta y guayo ----------------
    Vista desde arriba, mirando hacia el arco rival. Contorno negro tinta y un solo tono de sombra. */
-function drawBody(c, R, rect, rival) {
+function drawBody(c, R, rect, rival, kit) {
+  kit = (!rival && kit) || {};                           // kit: {jersey, stripe, shade, arms:false|-1|1, longSleeve, pattern(c,R,W,top,bot)} — solo dibujo
   const lw = Math.max(2, R * 0.15);
   const W = rect ? rect.w / 2 : R * 0.95, top = rect ? -rect.h * 0.62 : -R * 0.55, bot = rect ? rect.h * 0.55 : R * 0.5;
-  const jersey = rival ? PAL.azul : PAL.camisa, stripe = rival ? PAL.rivalRaya : PAL.franja, shade = rival ? '#22489E' : '#E2D3B5';
+  const jersey = rival ? PAL.azul : kit.jersey || PAL.camisa, stripe = rival ? PAL.rivalRaya : kit.stripe || PAL.franja, shade = rival ? '#22489E' : kit.shade || '#E2D3B5';
   // pantaloneta y guayos (debajo del torso)
   const legs = rect ? [-W * 0.45, W * 0.45] : [0];
   for (const lx of legs) {
@@ -107,11 +137,11 @@ function drawBody(c, R, rect, rival) {
     c.beginPath(); c.ellipse(lx + R * 0.08, bot + R * 0.44, R * 0.26, R * 0.2, 0, 0, Math.PI * 2); inkFill(c, PAL.tinta, lw * 0.7);
     c.beginPath(); c.moveTo(lx - R * 0.14, bot + R * 0.5); c.lineTo(lx + R * 0.3, bot + R * 0.5); c.lineWidth = R * 0.07; c.strokeStyle = PAL.crema; c.stroke();
   }
-  // brazos pegados al cuerpo (manga + mano)
-  for (const sx of [-1, 1]) {
+  // brazos pegados al cuerpo (manga + mano). kit.arms: false = ninguno · -1 / 1 = solo ese lado (el otro brazo lo dibuja el muñeco)
+  if (kit.arms !== false) for (const sx of kit.arms === -1 || kit.arms === 1 ? [kit.arms] : [-1, 1]) {
     const ax = sx * (W + R * 0.02);
     pathRoundRect(c, ax - R * 0.17, top + R * 0.2, R * 0.34, R * 0.92, R * 0.17); inkFill(c, PAL.piel, lw * 0.8);
-    pathRoundRect(c, ax - R * 0.17, top + R * 0.2, R * 0.34, R * 0.38, R * 0.15); inkFill(c, jersey, lw * 0.8);
+    pathRoundRect(c, ax - R * 0.17, top + R * 0.2, R * 0.34, R * (kit.longSleeve ? 0.72 : 0.38), R * 0.15); inkFill(c, kit.sleeve || jersey, lw * 0.8);
   }
   // torso (hombros)
   const torso = () => pathRoundRect(c, -W, top, W * 2, bot - top, R * 0.42);
@@ -119,6 +149,7 @@ function drawBody(c, R, rect, rival) {
   c.save(); torso(); c.clip();
   c.fillStyle = stripe;
   if (rival) for (let y = top + R * 0.14; y < bot; y += R * 0.36) c.fillRect(-W, y, W * 2, R * 0.14);   // rayas horizontales
+  else if (kit.pattern) kit.pattern(c, R, W, top, bot);                                                                             // estampado propio
   else for (const x of rect ? [-W * 0.6, -W * 0.15, W * 0.3] : [-R * 0.5, R * 0.16]) c.fillRect(x, top, rect ? W * 0.2 : R * 0.3, bot - top);   // franjas
   c.fillStyle = 'rgba(26,20,35,0.16)'; c.fillRect(0, (top + bot) / 2, W * 2, bot);                         // sombra plana
   c.fillStyle = shade; c.globalAlpha = 0.5; c.fillRect(W * 0.35, top, W, bot - top); c.globalAlpha = 1;
@@ -251,7 +282,7 @@ const HEADS = {
     for (let i = 0; i < 12; i++) {
       const a = Math.PI * 0.95 + i / 11 * Math.PI * 1.1, x = Math.cos(a) * hr * 1.05, y = Math.sin(a) * hr * 1.05;
       c.save(); c.translate(x, y); c.rotate(a + Math.PI / 2); c.beginPath(); c.ellipse(0, 0, hr * 0.16, hr * 0.34, 0, 0, Math.PI * 2);
-      inkFill(c, PAL.oro, hr * 0.07); c.restore();
+      inkFill(c, PAL.esmeralda, hr * 0.07); c.restore();
     }
   },
   penacho(c, hr) {                       // El Cacique: vincha con plumas
@@ -277,7 +308,7 @@ HEADS.poste = function (c, hr) {                          // El Poste: la boca d
   c.strokeStyle = 'rgba(26,20,35,0.22)'; c.lineWidth = hr * 0.07;            // la red del arco
   for (let i = -3; i <= 3; i++) { c.beginPath(); c.moveTo(i * hr * 0.4 - hr, -hr); c.lineTo(i * hr * 0.4 + hr, hr); c.stroke(); c.beginPath(); c.moveTo(i * hr * 0.4 + hr, -hr); c.lineTo(i * hr * 0.4 - hr, hr); c.stroke(); }
   c.restore();
-  circle(c, 0, 0, hr * 0.62); c.lineWidth = hr * 0.26; c.strokeStyle = PAL.plata; c.stroke();   // el tubo
+  circle(c, 0, 0, hr * 0.62); c.lineWidth = hr * 0.26; c.strokeStyle = PAL.crema; c.stroke();   // el tubo (blanco, como el palo)
   circle(c, 0, 0, hr * 0.4); c.fillStyle = PAL.tinta; c.fill();                                   // el hueco
   c.beginPath(); c.arc(0, 0, hr * 0.62, Math.PI * 1.1, Math.PI * 1.6); c.lineWidth = hr * 0.1; c.strokeStyle = '#ffffff'; c.stroke();
   circle(c, 0, 0, hr * 1.02); c.lineWidth = lw; c.strokeStyle = PAL.tinta; c.stroke();
@@ -428,14 +459,20 @@ function drawFigure(c, id, opts = {}) {
   drawBase(c, def ? def.rarity : 'comun', R, rect, tm, !!opts.rival);
   c.save();
   if (opts.turn) c.rotate(opts.turn);                     // mira hacia el balón / patea
-  drawBody(c, R, rect, !!opts.rival);
-  if (def && DECOR[def.id] && !rect) DECOR[def.id](c, R);
+  // aspecto propio del muñeco (js/munecos.js): atrás → cuerpo → encima → cabeza → adelante. Solo dibujo: el choque no cambia.
+  const look = !opts.rival && def && typeof LOOKS !== 'undefined' ? LOOKS[def.id] : null;
+  if (look && look.back) look.back(c, R, tm);
+  if (!(look && look.noBody)) drawBody(c, R, rect, !!opts.rival, look && look.kit);
+  if (look && look.over) look.over(c, R, tm);
+  else if (!look && def && DECOR[def.id] && !rect) DECOR[def.id](c, R);
   // sombra del cuello y cabeza, un poco adelante (hacia el arco rival)
-  c.save(); c.translate(0, rect ? -rect.h * 0.28 : -R * 0.3);
-  c.fillStyle = 'rgba(26,20,35,0.25)'; c.beginPath(); c.ellipse(hr * 0.12, hr * 0.28, hr * 0.95, hr * 0.7, 0, 0, Math.PI * 2); c.fill();
+  c.save(); c.translate(0, look && look.headY !== undefined ? R * look.headY : rect ? -rect.h * 0.28 : -R * 0.3);
+  if (!(look && look.noBody)) { c.fillStyle = 'rgba(26,20,35,0.25)'; c.beginPath(); c.ellipse(hr * 0.12, hr * 0.28, hr * 0.95, hr * 0.7, 0, 0, Math.PI * 2); c.fill(); }
   if (opts.rival) (opts.head && HEADS[opts.head] ? HEADS[opts.head] : (x, h) => skull(x, h, true))(c, hr);
+  else if (look && look.head) look.head(c, hr, tm);
   else if (def) (HEADS[def.head] || skull)(c, hr);
   c.restore();
+  if (look && look.front) look.front(c, R, tm);
   c.restore();
   if (opts.flash > 0.02) {
     // destello blanco solo sobre el muñeco (antes pintaba un cuadrado de la mesa)
@@ -455,8 +492,14 @@ function renderDollIcon(id, size) {
   circle(c, size / 2, size * 0.42, size * 0.33); c.fillStyle = PAL.cancha; c.fill(); c.restore();
   circle(c, size / 2, size / 2, size * 0.47); c.lineWidth = Math.max(2, size * 0.04); c.strokeStyle = PAL.tinta; c.stroke();
   const R = def.shape.kind === 'rect' ? def.shape.w / 2 + 4 : def.shape.r;
-  const k = (size * 0.29) / Math.max(R, 10);
-  c.translate(size / 2, size * 0.46); c.scale(k, k);
+  const box = def.shape.kind !== 'rect' && typeof LOOKS !== 'undefined' && LOOKS[id] && LOOKS[id].box;   // [x0, y0, x1, y1] en radios
+  if (box) {
+    const k = (size * 0.8) / (Math.max(box[2] - box[0], box[3] - box[1], 2.75) * R);
+    c.translate(size / 2 - (box[0] + box[2]) / 2 * R * k, size * 0.48 - (box[1] + box[3]) / 2 * R * k); c.scale(k, k);
+  } else {
+    const k = (size * 0.29) / Math.max(R, 10);
+    c.translate(size / 2, size * 0.46); c.scale(k, k);
+  }
   drawFigure(c, id, { tm: 0 });
   return cv.toDataURL();
 }

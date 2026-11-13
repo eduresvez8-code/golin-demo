@@ -5,13 +5,14 @@
    ===================================================================== */
 :root{
   --cancha:#1F8A4C; --noche:#0E4D2C; --madera:#C9803A; --maderaOsc:#7A4420; --crema:#F4EAD5; --tinta:#1A1423;
-  --pts:#2EC4B6; --mult:#E63946; --neon:#FF3D8B; --plata:#FFC93C; --rival:#2B59C3;
-  --metal:#B8C0CC; --metalOsc:#7D8694; --oro:#D4A017; --oroOsc:#8C6A0C;
+  --pts:#2EC4B6; --mult:#E63946; --neon:#FF3D8B; --plata:#FFE14D; --rival:#2B59C3; --multTxt:#FF6B76; --rivalTxt:#6F95F0;
+  --metal:#B8C0CC; --metalOsc:#7D8694; --oro:#B8860B; --oroOsc:#8A6408; --oroLuz:#E8B923;
+  --esm:#2EE6A0; --esmOsc:#0F8F63; --esmLuz:#B4F8DD;   /* esmeralda = Legendario; oro = Especial (v3.9) */
   --muted:#b9c7b8; --line:#1A1423;
   --fNum:"Bungee","Impact",system-ui,sans-serif; --fTxt:"Rubik",system-ui,sans-serif; --fHand:"Permanent Marker","Comic Sans MS",cursive;
   --ts:1;                     /* tamaño de texto (opción del jugador) */
 }
-body.cb{ --mult:#FF3D8B; }     /* modo daltónico: rojo mult → magenta neón */
+body.cb{ --mult:#FF3D8B; --multTxt:#FF8FBE; }     /* modo daltónico: rojo mult → magenta neón */
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%;touch-action:manipulation}
 *{-webkit-tap-highlight-color:transparent}
@@ -67,12 +68,12 @@ canvas{display:block;touch-action:none;border-radius:20px;box-shadow:8px 10px 0 
   background:var(--tinta);border:4px solid var(--crema);border-radius:18px;padding:14px 22px;min-width:min(330px,90%);z-index:5;box-shadow:8px 8px 0 var(--maderaOsc)}
 #tally.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
 .trow{display:flex;justify-content:space-between;align-items:center;font-family:var(--fNum);font-size:1.15rem;margin:5px 0;gap:20px}
-.trow .v{padding:2px 14px;border-radius:999px;color:var(--tinta);border:3px solid var(--crema)}
+.trow .v{padding:2px 14px;border-radius:999px;color:var(--tinta);border:3px solid var(--crema);transform-origin:100% 50%}   /* el rebote crece hacia adentro: no pisa el borde del panel */
 #tPts{background:var(--pts)!important}
 #tMult{background:var(--mult)!important;border-radius:6px!important}
 .mod{display:flex;justify-content:space-between;font-size:1rem;padding:3px 4px;animation:slidein .18s ease-out;gap:16px}
 .mod b{font-family:var(--fNum);font-weight:400}
-.mod b.on-mult{color:var(--mult)} .mod b.on-pts{color:var(--pts)}
+.mod b.on-mult{color:var(--multTxt)} .mod b.on-pts{color:var(--pts)}
 .mod.bad b{opacity:.85} .mod.fail{opacity:.45;text-decoration:line-through}
 @keyframes slidein{from{transform:translateX(-20px);opacity:0}to{transform:none;opacity:1}}
 #tFinalRow{opacity:0;text-align:center;border-top:3px dashed var(--crema);margin-top:8px;padding-top:6px}
@@ -101,8 +102,8 @@ canvas{display:block;touch-action:none;border-radius:20px;box-shadow:8px 10px 0 
 .bossCard small{font-family:var(--fNum);color:var(--muted);font-size:.75rem}
 .bossName{font-size:2.6rem!important;color:var(--crema);background:var(--rival);border:4px solid var(--tinta);outline:3px solid var(--crema);border-radius:10px;padding:6px 14px;display:inline-block;transform:rotate(-2deg);margin:10px 0!important}
 .bossRule{font-size:1.15rem}
-.legend{color:var(--oro)!important}
-.legendCard{display:flex;gap:14px;align-items:center;text-align:left;background:var(--crema);color:var(--tinta);border-radius:12px;padding:10px;border:4px solid var(--oro);margin:8px 0}
+.legend{color:var(--esm)!important}
+.legendCard{display:flex;gap:14px;align-items:center;text-align:left;background:var(--crema);color:var(--tinta);border-radius:12px;padding:10px;border:4px solid var(--esmOsc);box-shadow:4px 4px 0 var(--tinta),inset 0 0 0 2px var(--esm);margin:8px 0}
 .legendCard img{width:96px;height:96px}
 .legendCard p{margin:4px 0}
 .discardList{display:flex;flex-direction:column;gap:6px}
@@ -145,14 +146,16 @@ canvas{display:block;touch-action:none;border-radius:20px;box-shadow:8px 10px 0 
   border-radius:8px;padding:0 8px;transform:rotate(6deg)}
 .price.shake,.card.shake,#bReroll.shake{animation:shk .3s}
 @keyframes shk{20%{transform:translateX(-7px) rotate(6deg)}60%{transform:translateX(7px) rotate(6deg)}}
-/* bordes de rareza por material: Común madera · Raro plata · Especial toldo verde y crema · Legendario oro con corona */
+/* bordes de rareza por material: Común madera · Raro plata · Especial dorado brillante · Legendario esmeralda con corona */
 .r-comun{border-color:var(--madera);box-shadow:4px 4px 0 var(--maderaOsc),inset 0 0 0 2px #E0A468}
 .r-raro{border-color:var(--metal);box-shadow:4px 4px 0 var(--maderaOsc),inset 0 0 0 2px var(--metalOsc)}
-.r-especial{border-image:repeating-linear-gradient(45deg,var(--cancha) 0 9px,var(--crema) 9px 18px) 4}
-.r-legendario{border-color:var(--oro);animation:oro 1.4s linear infinite}
-.r-legendario::before{content:"👑";position:absolute;left:-8px;top:-14px;font-size:1.25rem;line-height:1;transform:rotate(-14deg);filter:drop-shadow(1px 1px 0 var(--tinta));z-index:2}
-.ab-comun b{color:#E0A468}.ab-especial b{color:#7BD39E}.ab-raro b{color:var(--metal)}.ab-legendario b{color:var(--oro)}
-@keyframes oro{0%,100%{box-shadow:4px 4px 0 var(--oroOsc),0 0 0 #fff0}50%{box-shadow:4px 4px 0 var(--oroOsc),0 0 14px #fff8}}
+.r-especial{border-color:var(--oroLuz);box-shadow:4px 4px 0 var(--oro),inset 0 0 0 2px #fff}
+.r-legendario{border-color:var(--esm);box-shadow:4px 4px 0 var(--esmOsc),inset 0 0 0 2px var(--esmLuz);animation:esm 1.4s linear infinite}
+.r-legendario::before{content:"";position:absolute;left:-9px;top:-13px;width:26px;height:20px;background:url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 26 20%27%3E%3Cpath d=%27M3 17V6l5.5 5L13 2.5l4.5 8.5L23 6v11z%27 fill=%27%232EE6A0%27 stroke=%27%231A1423%27 stroke-width=%272.2%27 stroke-linejoin=%27round%27/%3E%3Cpath d=%27M13 6.5l3 5.5h-6z%27 fill=%27%23B4F8DD%27/%3E%3Cpath d=%27M4.6 15h16.8%27 stroke=%27%230F8F63%27 stroke-width=%272%27/%3E%3Cpath d=%27M5 8.6v4%27 stroke=%27%23fff%27 stroke-width=%271.6%27 stroke-linecap=%27round%27/%3E%3C/svg%3E") no-repeat center/contain;transform:rotate(-14deg);filter:drop-shadow(2px 2px 0 var(--tinta));z-index:2}
+.ab-comun b{color:#E0A468}.ab-especial b{color:var(--oroLuz)}.ab-raro b{color:var(--metal)}.ab-legendario b{color:var(--esm)}
+@keyframes esm{0%,100%{box-shadow:4px 4px 0 var(--esmOsc),inset 0 0 0 2px var(--esmLuz),0 0 0 #fff0}50%{box-shadow:4px 4px 0 var(--esmOsc),inset 0 0 0 2px #fff,0 0 14px var(--esm)}}
+@media (prefers-reduced-motion:reduce){.r-legendario{animation:none}}
+body.calm .r-legendario{animation:none}
 .bench{display:flex;gap:6px}
 .bslot{position:relative;flex:1;min-height:86px;border:3px dashed var(--crema);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;
   font-size:.75rem;padding:4px;background:rgba(26,20,35,.35)}
@@ -206,7 +209,7 @@ canvas{display:block;touch-action:none;border-radius:20px;box-shadow:8px 10px 0 
 #dollMenu .btn.sell{background:var(--plata)}
 @media (prefers-reduced-motion:reduce){#dollMenu,#tip{animation:none}}
 .fdot{display:inline-block;width:.62em;height:.62em;border-radius:50%;margin-right:.4em;border:1.5px solid var(--tinta);vertical-align:-.02em;opacity:1}
-.f-sumador{background:#2EC4B6}.f-multiplicador{background:#E63946}.f-economia{background:#FFC93C}.f-manipulador{background:#FF3D8B}
+.f-sumador{background:#2EC4B6}.f-multiplicador{background:#E63946}.f-economia{background:#FFE14D}.f-manipulador{background:#FF3D8B}
 .f-posicional{background:#B6E83A}.f-escalador{background:#A56BFF}.f-condicional{background:#FF9A3C}.f-none{background:#8a8f98}
 body.cb .f-multiplicador{background:#FF3D8B}body.cb .f-manipulador{background:#F4F4F4}
 #tooltip .plataTxt{color:var(--tinta);font-weight:700}
@@ -286,7 +289,7 @@ body.cb .f-multiplicador{background:#FF3D8B}body.cb .f-manipulador{background:#F
 .legendPick{display:flex;flex-direction:column;gap:10px}
 .legendCard.pick{cursor:pointer;border-width:4px;font:inherit;text-align:left;width:100%}
 @media (hover:hover){.legendCard.pick:hover{transform:translateY(-2px)}}
-.bossName.captain{background:var(--oroOsc)}
+.bossName.captain{background:var(--esm);color:var(--tinta)}
 
 /* ---------- entrada a la Tienda de Don Chucho ---------- */
 #shutter{position:fixed;inset:0;z-index:85;overflow:hidden;pointer-events:auto;cursor:default}
@@ -343,6 +346,8 @@ body.cb .f-multiplicador{background:#FF3D8B}body.cb .f-manipulador{background:#F
   #shotbar::-webkit-scrollbar{display:none}
   #shotbar > :first-child{margin-left:auto} #shotbar > :last-child{margin-right:auto}
   #shotbar > *{flex:none;white-space:nowrap}
+  #shotbar > .chip.small.ok:not(:only-child),#shotbar > .btn.skip{white-space:normal;flex:0 1 auto;min-width:0;line-height:1.15;text-align:center}   /* "¡Meta!…" y "Saltar tiros" usan dos líneas si no caben: nada queda fuera de la pantalla */
+  #shotbar > .chip.small.ok:not(:only-child){border-radius:14px}
   #shotbar .lbl{font-size:.62rem} #shotbar .sep{font-size:1.1rem}
   .chip{font-size:1rem;padding:2px 10px;border-width:2px;box-shadow:2px 2px 0 var(--tinta)}
   .chip.small{font-size:.72rem;padding:3px 8px}
@@ -519,7 +524,7 @@ body.cb .f-multiplicador{background:#FF3D8B}body.cb .f-manipulador{background:#F
 .poster span{font-size:.85rem;line-height:1.3}
 .poster em{font-style:normal;font-family:var(--fNum);font-size:.72rem;margin-top:auto;background:var(--tinta);color:var(--crema);border-radius:6px;padding:3px 8px;align-self:flex-start}
 .poster{background-image:linear-gradient(180deg,var(--pc,#1F8A4C) 0 22px,transparent 22px)}
-.poster.lv1{--pc:#1F8A4C}.poster.lv2{--pc:#8A8478}.poster.lv3{--pc:#2BA862}.poster.lv4{--pc:#15663A}.poster.lv5{--pc:#D4A017}
+.poster.lv1{--pc:#1F8A4C}.poster.lv2{--pc:#8A8478}.poster.lv3{--pc:#2BA862}.poster.lv4{--pc:#15663A}.poster.lv5{--pc:#B8860B}
 .poster.on{outline:5px solid var(--cancha);outline-offset:2px}
 .poster.locked{filter:grayscale(1);opacity:.6;cursor:not-allowed}
 .record{margin:6px 0;font-family:var(--fNum);font-size:.95rem;background:var(--crema);color:var(--tinta);border:3px solid var(--tinta);border-radius:8px;padding:4px 10px;transform:rotate(-1.5deg);display:inline-block}
