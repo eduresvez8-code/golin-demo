@@ -179,7 +179,7 @@
     diez() {},                                              // Mult base
   };
 
-  /* ev: {ballId, kind:'wall'|'rival'|'own', key, doll?, power?, muted?} */
+  /* ev: {ballId, kind:'wall'|'rival'|'own', key, post?, doll?, power?, muted?} */
   function contact(shot, ev, cfg, rng = Math.random) {
     const fx = [];
     shot.contacts++;
@@ -188,7 +188,7 @@
     shot.lastKind.set(ev.ballId, ev.kind);
     if (ev.kind === 'wall') {
       shot.walls++;
-      let w = cfg.scoring.wallPts;
+      let w = cfg.scoring.wallPts * (ev.post ? (cfg.scoring.postMult || 1) : 1);   // ¡PALO!: el poste del arco paga más que una banda
       if (!shot.cornetaUsed && shot.corneta > 0) { shot.cornetaUsed = true; w += cfg.scoring.wallPts * (cfg.dolls.corneta.wallMult - 1) * shot.corneta; }   // El Corneta: la primera banda del tiro paga más
       pts(fx, shot, w, 'wall');
     }

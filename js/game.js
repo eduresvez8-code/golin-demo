@@ -423,7 +423,7 @@ function onContact(bo, other, n, impact) {
   shot.hitsBy = shot.hitsBy || {};
   if ((shot.hitsBy[key] = (shot.hitsBy[key] || 0) + 1) > MAX_HITS_PER_BODY) return;
   const kind = other.plugin.kind === 'wall' ? 'wall' : other.plugin.kind === 'rival' ? 'rival' : 'own';
-  const ev = { ballId: bo.id, kind, key: 'b' + other.id };
+  const ev = { ballId: bo.id, kind, key: 'b' + other.id, post: !!other.plugin.post };   // post: el palo paga el doble que una banda
   let slot = null;
   if (kind === 'own') { slot = other.plugin.slot; ev.doll = slot.doll; ev.power = powerOf(slot); ev.muted = !!slot.doll.muted; ev.stitch = SC.stitchBonus(G.slots, slot, CFG); ev.front = slot.rod === 0 && slot.i <= 1; }   // CP7 rinde más de delantero (izquierda o centro)
   const fx = SC.contact(shot, ev, scoringCfg(), Math.random);
@@ -706,15 +706,21 @@ function useItem(i) {
   LOG.item(id); updateBoard(); updateShotbar(); renderSide();
   if (id === 'polvora') coach('walls2');
 }
+/* Cámara lenta: el balón va hacia cualquiera de los dos arcos, entre o no (también si va al palo o pasa rozando).
+   Puede repetirse en el mismo tiro si el balón vuelve al arco, con una pausa de SLOWMO_GAP s entre una y otra. */
+const SLOWMO_MARGIN = 40, SLOWMO_GAP = 1.5;
 function checkSlowmo() {
   for (const bo of balls) {
-    if (!bo.alive || !bo.moving || bo.slowmo) continue;
+    if (!bo.alive || !bo.moving || shot.t - (bo.slowmoAt ?? -99) < SLOWMO_GAP) continue;
     const p = bo.body.position, v = getV(bo.body), look = 0.3 * 60;
-    const fx = p.x + v.x * look, fy = p.y + v.y * look;
+    const fx = p.x + v.x * look, fy = p.y + v.y * look, m = SLOWMO_MARGIN;
     let hit = false;
-    if (p.y > T.t && fy < T.t - 6) { const k = (p.y - T.t) / (p.y - fy), cx = p.x + (fx - p.x) * k; hit = cx > GR.x1 + 6 && cx < GR.x2 - 6; }
-    if (p.y < T.b && fy > T.b + 6) { const k = (T.b - p.y) / (fy - p.y), cx = p.x + (fx - p.x) * k; hit = hit || (cx > GO.x1 + 6 && cx < GO.x2 - 6); }
-    if (hit) { bo.slowmo = true; slowmoLeft = CFG.juice.slowmoDur; SFX.slowmo(); }
+    if (p.y > T.t && fy < T.t - 6) { const k = (p.y - T.t) / (p.y - fy), cx = p.x + (fx - p.x) * k; hit = cx > GR.x1 - m && cx < GR.x2 + m; }
+    if (p.y < T.b && fy > T.b + 6) { const k = (T.b - p.y) / (fy - p.y), cx = p.x + (fx - p.x) * k; hit = hit || (cx > GO.x1 - m && cx < GO.x2 + m); }
+    if (hit) {
+      for (const o of balls) o.slowmo = false;                    // el zoom sigue a este balón
+      bo.slowmo = true; bo.slowmoAt = shot.t; slowmoLeft = CFG.juice.slowmoDur; SFX.slowmo();
+    }
   }
 }
 function endShot() {

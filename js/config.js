@@ -33,6 +33,7 @@
       },
       scoring: {
         wallPts: 15,          // puntos por banda
+        postMult: 2,          // el palo (poste del arco) paga esto × una banda
         goalBonus: 1.5,       // ×Mult con gol en arco rival
         noGoalFactor: 0.5,    // ×Mult si el balón se detiene sin gol
         autogolFactor: 0,     // ×Mult en autogol (salvo La Mano)

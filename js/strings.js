@@ -196,7 +196,7 @@
     'help.1': 'Jala hacia atrás desde el balón y suelta.',
     'help.1.touch': 'Jala hacia atrás desde cualquier parte de la mesa y suelta.',
     'help.2': 'Puntaje = Puntos × Mult. Gol ×{goal}; sin gol ×{nogoal}.',
-    'help.3': 'Llega a la meta en {s} tiros. Cada banda: +{wall}.',
+    'help.3': 'Meta en {s} tiros. Banda: +{wall}. Palo: el doble.',
     'help.5': 'Lo que pases de la meta se guarda para el próximo partido.',
     'help.4': 'El autogol no puntúa. Tres vidas por picadito.',
 
