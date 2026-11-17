@@ -14,6 +14,8 @@ const PAL = {
   plata:'#B8C0CC', plataOsc:'#7D8694', oro:'#B8860B', oroOsc:'#8A6408', oroLuz:'#E8B923', rojoTxt:'#FF6B76', azulTxt:'#6F95F0',
   // esmeralda = Legendario (v3.9). Nunca plana: facetas oscura/clara, brillo blanco y contorno de tinta grueso
   esmeralda:'#2EE6A0', esmeraldaOsc:'#0F8F63', esmeraldaLuz:'#B4F8DD',
+  // tonos de material para el menú (v3.12): luz y sombra de la madera, del papel y del verde. No son señales: solo dan volumen
+  maderaLuz:'#E3A35C', maderaHond:'#4A2710', papel:'#FBF4E4', papelOsc:'#D8C39C', papelFondo:'#E9DBBE', canchaLuz:'#37A862', canchaOsc:'#12603A',
   piel:'#B9774A', pielOsc:'#8A5230', pelo:'#1A1423',
   // camiseta propia: crema con franjas rojas (el rojo de equipo, no el de Mult)
   camisa:'#F4EAD5', franja:'#B8313C', rivalRaya:'#1E3F8C',
