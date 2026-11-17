@@ -1093,6 +1093,7 @@ function buy(idx, target) {
   SFX.caja(2); SFX.place();
   LOG.shop({ type:'buy', id, price, to: target.slot ? 'mesa' : 'banca' });
   updateBoard(); renderSide();
+  if (isCompact() && target.slot) setTimeout(() => { if (G.state === 'shop' && !G.pick && G.selectedOffer === null && !drag) openSheet(); }, 750);   // celular: ves caer el muñeco y vuelves a la tienda
 }
 const itemState = () => ({ legCap: G.legCap, legCapMax: CFG.economy.legendaryCapMax, benchSize: G.bench.length, benchMax: CFG.economy.benchMax, bought: G.itemsBought });
 function buyItem(i) {

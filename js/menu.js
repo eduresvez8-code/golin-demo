@@ -427,7 +427,7 @@ function renderMas() {
     '<p class="mNote" id="mMasNote" role="status" aria-live="polite"></p>' +
     '<h3 class="rtSec">' + t('more.stats') + '</h3><ul class="stats"><li class="stat hero"><div class="heroIn"><span>' + t('more.bestShot') + '</span><b data-n="' + (PROFILE.bestShotEver || 0) + '">' + fmt(PROFILE.bestShotEver || 0) + '</b></div></li>' +
     stat('more.runs', PROFILE.runs || 0) + stat('more.wins', PROFILE.wins || 0) + stat('more.bestSeason', PROFILE.bestSeason || 1) + stat('more.found', 0, a.n + ' / ' + a.m) + '</ul>' +
-    '<p class="masFoot mVer">GOLÍN v3.12</p></div>';
+    '<p class="masFoot mVer">GOLÍN v3.13</p></div>';
   masCounted = false;
   $('mOpt').onclick = () => { audio(); openOptions(); };
   $('mLog').onclick = () => { audio(); copyLog(msg => { const n = $('mMasNote'); if (n) { n.textContent = msg; setTimeout(() => { if (n.textContent === msg) n.textContent = ''; }, 4000); } }); };

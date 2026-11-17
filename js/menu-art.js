@@ -135,12 +135,12 @@ const MA = (() => {
      El mismo señor de siempre (calvo, patillas, bigotazo, una ceja arriba, delantal crema y el lápiz del fiado), con volumen:
      piel con luz arriba a la izquierda, contorno marrón, ojos con brillo. Caja de 240×280, hombros en y≈214.
      o: {eyes:'wink'|'open'|'closed'|'wide', blink, breath (−1..1), bob, tilt, arm:{a, prop, t}, paper (0..1), headline} */
-  function arm(c, x, y, a, prop, t) {
+  function arm(c, x, y, a, prop, t, len = 92) {                          // len: del hombro a la palma (el antebrazo se estira o encoge)
     c.save(); c.translate(x, y); c.rotate(a);
-    rr(c, -11, 52, 22, 36, 10); fine(c, lin(c, -11, 0, 11, 0, [mix(K.skin, K.skinL, 0.45), [0.5, K.skin], K.skinD]), K.skinX, 2.2);       // antebrazo
+    rr(c, -11, 52, 22, Math.max(14, len - 56), 10); fine(c, lin(c, -11, 0, 11, 0, [mix(K.skin, K.skinL, 0.45), [0.5, K.skin], K.skinD]), K.skinX, 2.2);       // antebrazo
     rr(c, -15, -6, 30, 68, 14); fine(c, lin(c, -15, 0, 15, 0, [mix(P.cancha, P.noche, 0.5), [0.45, K.shirtL], K.shirt]), K.shirtX, 2.4); // manga
     rr(c, -15.5, 51, 31, 10, 4.5); fine(c, mix(P.cancha, P.noche, 0.4), K.shirtX, 1.8);                                                  // puño
-    c.translate(0, 92);
+    c.translate(0, len);
     const palm = () => { c.beginPath(); c.arc(0, 0, prop === 'wave' ? 15 : 13.5, 0, TAU); fine(c, rad(c, -4, -4, 1, 16, [mix(K.skin, K.skinL, 0.55), [0.6, K.skin], K.skinD]), K.skinX, 2.2); };
     if (prop === 'wave') {                                                  // mano abierta: cuatro dedos en abanico y el pulgar aparte
       for (let i = 0; i < 4; i++) { c.save(); c.rotate((i - 1.5) * 0.25); rr(c, -4.3, 6, 8.6, 25 - Math.abs(i - 1.3) * 2.6, 4.3); fine(c, lin(c, 0, 6, 0, 30, [K.skin, mix(K.skin, K.skinL, 0.4)]), K.skinX, 1.8); c.restore(); }
@@ -159,27 +159,36 @@ const MA = (() => {
       el(c, 0, -25, w, 13.5); fine(c, rad(c, -w * 0.3, -29, 1, 17, [K.coinL, [0.7, P.amarillo], mix(P.amarillo, K.coinX, 0.35)]), K.coinX, 2);
       if (sx > 0.45) { el(c, 0, -25, w * 0.72, 9.6); c.lineWidth = 1.1; c.strokeStyle = hexA(K.coinX, 0.55); c.stroke(); c.fillStyle = K.coinX; c.font = `12px ${FONT_NUM}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.save(); c.translate(0, -24.4); c.scale(sx, 1); c.fillText('$', 0, 0); c.restore(); }
       if (sx > 0.92) { c.fillStyle = '#ffffff'; c.beginPath(); for (let i = 0; i < 8; i++) { const an = i * Math.PI / 4, rr2 = i % 2 ? 1.6 : 6; c.lineTo(9 + Math.cos(an) * rr2, -35 + Math.sin(an) * rr2); } c.closePath(); c.fill(); }
-    } else if (prop === 'broom') {                                          // escoba: las cerdas hacia el mostrador
-      c.save(); c.rotate(-a + 0.35);
-      rr(c, -4, -62, 8, 142, 3.5); fine(c, lin(c, -4, 0, 4, 0, [P.maderaLuz, P.madera, mix(P.madera, P.maderaOsc, 0.5)]), P.maderaHond, 1.8);
-      c.beginPath(); c.moveTo(-19, 78); c.lineTo(19, 78); c.lineTo(28, 120); c.lineTo(-28, 120); c.closePath(); fine(c, lin(c, 0, 78, 0, 120, [mix(P.maderaLuz, P.papel, 0.35), P.maderaLuz]), mix(P.maderaOsc, P.madera, 0.3), 2);
-      c.lineWidth = 1.1; c.strokeStyle = hexA(P.maderaOsc, 0.45); for (let i = -3; i <= 3; i++) { c.beginPath(); c.moveTo(i * 5, 88); c.lineTo(i * 7.4, 118); c.stroke(); }
-      rr(c, -20, 76, 40, 8, 3); fine(c, mix(P.cancha, P.noche, 0.3), K.shirtX, 1.6);
-      c.restore(); palm();
-    } else if (prop === 'ball') {                                         // balón girando en la punta del dedo
-      rr(c, -3.8, 4, 7.6, 22, 3.8); fine(c, K.skin, K.skinX, 1.8); palm(); c.rotate(-a);
-      const by = -45 + Math.sin(t / 190) * 1.2, R = 19;
-      c.beginPath(); c.arc(0, by, R, 0, TAU); c.fillStyle = rad(c, -6, by - 7, 2, R * 1.25, ['#ffffff', [0.65, P.papel], P.papelOsc]); c.fill();
-      c.save(); c.beginPath(); c.arc(0, by, R - 0.6, 0, TAU); c.clip(); c.fillStyle = mix(P.tinta, P.maderaOsc, 0.15);
-      for (let i = 0; i < 6; i++) { const ph = t / 170 + i * TAU / 6, x = Math.sin(ph) * R * 0.86, z = Math.cos(ph); if (z > -0.15) { el(c, x, by + (i % 2 ? -7 : 7), 6.4 * Math.max(0.15, z), 6.2); c.fill(); } }
-      c.restore(); c.beginPath(); c.arc(0, by, R, 0, TAU); c.lineWidth = 1.8; c.strokeStyle = mix(P.tinta, P.maderaOsc, 0.4); c.stroke();
-      c.fillStyle = hexA('#ffffff', 0.7); el(c, -7, by - 9, 5, 2.6, -0.6); c.fill();
+    } else if (prop === 'broom') {                                          // escoba al revés: barre las telarañas del techo y suelta polvo
+      c.save(); c.rotate(-a + Math.PI - 0.32 + Math.sin(t / 300) * 0.16);
+      rr(c, -4, -34, 8, 104, 3.5); fine(c, lin(c, -4, 0, 4, 0, [P.maderaLuz, P.madera, mix(P.madera, P.maderaOsc, 0.5)]), P.maderaHond, 1.8);
+      c.beginPath(); c.moveTo(-17, 66); c.lineTo(17, 66); c.lineTo(26, 104); c.lineTo(-26, 104); c.closePath(); fine(c, lin(c, 0, 66, 0, 104, [P.maderaLuz, mix(P.maderaLuz, P.papel, 0.35)]), mix(P.maderaOsc, P.madera, 0.3), 2);
+      c.lineWidth = 1.1; c.strokeStyle = hexA(P.maderaOsc, 0.45); for (let i = -3; i <= 3; i++) { c.beginPath(); c.moveTo(i * 4.5, 75); c.lineTo(i * 6.8, 102); c.stroke(); }
+      rr(c, -18, 63, 36, 8, 3); fine(c, mix(P.cancha, P.noche, 0.3), K.shirtX, 1.6);
+      for (let i = 0; i < 5; i++) { const q = ((t / 900) + i / 5) % 1, side = i % 2 ? 1 : -1; c.globalAlpha = (1 - q) * 0.55; c.fillStyle = P.papelOsc; c.beginPath(); c.arc(side * (8 + q * 26) + Math.sin(i * 3.1) * 6, 106 + q * 34, 2.5 + q * 5, 0, TAU); c.fill(); }
+      c.globalAlpha = 1; c.restore(); palm();
+    } else if (prop === 'ball') {                                         // balón girando en la punta del índice: siempre tocándolo
+      palm(); c.rotate(-a);
+      c.save(); c.rotate(-0.5); rr(c, -4.2, -2, 8.4, 15, 4.2); fine(c, K.skin, K.skinX, 1.6); c.restore();        // pulgar
+      rr(c, -4.4, -26, 8.8, 20, 4.4); fine(c, lin(c, -4.4, 0, 4.4, 0, [mix(K.skin, K.skinL, 0.5), K.skin]), K.skinX, 1.8);   // índice derecho hacia arriba
+      const R = 21, wob = Math.sin(t / 230) * 0.07, tipY = -25;
+      c.save(); c.translate(0, tipY); c.rotate(wob); c.translate(0, -R + 1.5);                              // el balón se mece sobre la uña, sin despegarse
+      c.beginPath(); c.arc(0, 0, R, 0, TAU); c.fillStyle = rad(c, -7, -8, 2, R * 1.25, ['#ffffff', [0.65, P.papel], P.papelOsc]); c.fill();
+      c.save(); c.beginPath(); c.arc(0, 0, R - 0.6, 0, TAU); c.clip(); c.fillStyle = mix(P.tinta, P.maderaOsc, 0.15);
+      for (let i = 0; i < 6; i++) { const ph = t / 150 + i * TAU / 6, x = Math.sin(ph) * R * 0.86, z = Math.cos(ph); if (z > -0.15) { el(c, x, i % 2 ? -7.5 : 7.5, 7 * Math.max(0.15, z), 6.6); c.fill(); } }
+      c.restore(); c.beginPath(); c.arc(0, 0, R, 0, TAU); c.lineWidth = 1.8; c.strokeStyle = mix(P.tinta, P.maderaOsc, 0.4); c.stroke();
+      c.fillStyle = hexA('#ffffff', 0.7); el(c, -7.5, -10, 5.5, 2.8, -0.6); c.fill();
+      c.restore();
+      c.save(); c.translate(0, tipY); c.lineWidth = 1.6; c.strokeStyle = hexA(P.maderaOsc, 0.45);           // rayitas de giro
+      for (let i = 0; i < 2; i++) { const q = ((t / 520) + i / 2) % 1; c.globalAlpha = Math.sin(q * Math.PI); c.beginPath(); c.arc(0, -R, R + 6 + q * 4, Math.PI * (1.08 + i * 0.5), Math.PI * (1.3 + i * 0.5)); c.stroke(); }
+      c.globalAlpha = 1; c.restore();
     } else if (prop === 'rag') {                                          // trapo de limpiar el mostrador
       c.save(); c.rotate(-a); rr(c, -27, -4, 54, 21, 9); fine(c, lin(c, 0, -4, 0, 17, [P.papel, P.crema, P.papelOsc]), K.paperX, 1.8);
       c.fillStyle = hexA(P.cancha, 0.75); c.fillRect(-23, 2, 46, 3); c.fillRect(-23, 9, 46, 3); c.restore(); palm();
-    } else if (prop === 'pencil') {                                       // escribe con el lápiz del fiado
-      c.save(); c.rotate(-a + 0.5); rr(c, -3, -8, 6, 34, 2); fine(c, lin(c, -3, 0, 3, 0, [P.maderaLuz, P.madera]), P.maderaHond, 1.4);
-      c.beginPath(); c.moveTo(-3, 26); c.lineTo(0, 33); c.lineTo(3, 26); c.closePath(); fine(c, P.papel, P.maderaHond, 1.2); c.fillStyle = P.plata; c.fillRect(-3, -6, 6, 3); c.restore(); palm();
+    } else if (prop === 'pencil') {                                       // el lápiz del fiado: la punta queda abajo a la izquierda de la palma
+      c.save(); c.rotate(-a + 0.45); rr(c, -3, -10, 6, 36, 2); fine(c, lin(c, -3, 0, 3, 0, [P.maderaLuz, P.madera]), P.maderaHond, 1.4);
+      c.beginPath(); c.moveTo(-3, 26); c.lineTo(0, 33); c.lineTo(3, 26); c.closePath(); fine(c, P.papel, P.maderaHond, 1.2);
+      c.beginPath(); c.arc(0, 32.4, 0.9, 0, TAU); c.fillStyle = P.tinta; c.fill(); c.fillStyle = P.plata; c.fillRect(-3, -8, 6, 3); c.restore(); palm();
     } else palm();
     c.restore();
   }
@@ -409,7 +418,7 @@ const MA = (() => {
       case 'dormido': if (!still && ms < 1800) { pose.eyes = 'closed'; pose.tilt = 0.06; pose.bob = 3; pose.blink = false; } else if (!still && ms < 3000) { pose.eyes = 'wide'; pose.bob = -5; } break;
       case 'balon': pose.arm = { a: -2.56 + (still ? 0 : Math.sin(ms / 500) * 0.03), prop: 'ball', t: still ? 0 : ms }; pose.eyes = 'open'; pose.look = [1.6, -1.6]; break;                 // hace girar un balón en el dedo
       case 'trapo': over = { a: 1.3, prop: 'rag', dx: still ? 0 : Math.sin(ms / 340) * 17 }; lean = (over.dx || 0) * 0.2; pose.eyes = 'open'; pose.look = [-1.4, 2.6]; pose.tilt = 0.03; break;   // limpia el mostrador
-      case 'cuaderno': over = { a: 1.3 + (still ? 0 : Math.sin(ms / 60) * 0.018), prop: 'pencil', dx: still ? 0 : ((ms / 1500) % 1) * 22 - 11 }; pose.eyes = 'open'; pose.look = [-1, 3]; pose.tilt = 0.035; break;   // anota el fiado
+      case 'cuaderno': over = { prop: 'pencil' }; pose.eyes = 'open'; pose.look = [-1, 3]; pose.tilt = 0.035; break;   // anota el fiado
       case 'mosca': if (!still) { const a = ms / 520; fly = { x: hx + Math.sin(a) * cw * 0.52 + Math.sin(a * 2.7) * 14, y: chY + ch * 0.17 + Math.cos(a * 1.3) * ch * 0.15 }; const dx = fly.x - hx, dy = fly.y - (chY + ch * 0.41), d = Math.hypot(dx, dy) || 1; pose.look = [dx / d * 3, dy / d * 2.6]; pose.blink = false; } pose.eyes = 'open'; break;   // la sigue con la mirada
     }
     if (over) pose.arm = { over: true };
@@ -434,22 +443,38 @@ const MA = (() => {
       hits.cat = [gx - 44 * gs, gy - 52 * gs, 86 * gs, 56 * gs];
     }
     if (eg.fiado) { fiado(c, fxX, oy + 1, ms, still, since(fx.fiadoT)); hits.fiado = [fxX - 38, oy - 46, 76, 52]; }
-    if (over) {                                                           // el brazo que trabaja sobre el mostrador
-      const hx2 = cx + lean + (over.dx || 0) + 105 * k;
-      if (over.prop === 'pencil') {                                       // la libreta del fiado, abierta sobre la tabla
-        const nx = cx + 104 * k, nw = 104 * k;
-        c.save(); c.transform(1, 0, -0.35, 1, 0, 0); const sx = nx + cy * 0.35 - nw / 2;
+    if (over) {                                                           // el brazo que trabaja sobre el mostrador: la mano llega justo a lo que toca
+      const bx = cx + lean, shX = bx + 194 * k, shY = chY + 214 * k;
+      let px, py;                                                         // dónde va la palma, en la pantalla
+      if (over.prop === 'pencil') {                                       // la libreta del fiado, abierta sobre la tabla, y la letra que va saliendo
+        const nx = cx + 104 * k, nw = 104 * k, sk = 0.35, sx = nx + cy * sk - nw / 2;
+        const LINE = 1700, WR = 1250, n = 3, cyc = still ? LINE * 1.6 : ms % (LINE * n + 600), li = Math.min(n - 1, Math.floor(cyc / LINE)), lt = cyc - li * LINE;
+        const page = still ? 1 : Math.min(1, (LINE * n + 600 - cyc) / 300);                                       // al final de la página la tinta se borra (pasa la hoja)
+        const u = cyc >= LINE * n ? 1 : lt < WR ? lt / WR : 1, lifting = cyc >= LINE * n || lt >= WR;
+        const lineY = i => cy + 1.2 + i * 3.6, x0 = 6, x1 = nw / 2 - 8;
+        c.save(); c.transform(1, 0, -sk, 1, 0, 0);
         rr(c, sx, cy - 3, nw, 15, 2.5); fine(c, lin(c, 0, cy - 3, 0, cy + 12, ['#ffffff', P.papel, P.papelOsc]), K.paperX, 1.4);
         c.fillStyle = hexA(K.paperX, 0.8); c.fillRect(sx + nw / 2 - 0.7, cy - 3, 1.4, 15);
-        c.fillStyle = hexA(P.tinta, 0.3); for (let i = 0; i < 3; i++) { c.fillRect(sx + 6, cy + 0.5 + i * 3.6, nw / 2 - 12, 1); c.fillRect(sx + nw / 2 + 6, cy + 0.5 + i * 3.6, (nw / 2 - 12) * (i < 1 ? 0.7 : 0.25), 1); }
-        c.restore();
-      }
-      c.save(); c.translate(cx + lean + (over.dx || 0), chY); c.scale(k, k); c.lineJoin = 'round'; c.lineCap = 'round'; arm(c, 194, 214, over.a, over.prop, ms); c.restore();
+        c.fillStyle = hexA(P.tinta, 0.22); for (let i = 0; i < 3; i++) c.fillRect(sx + nw / 2 + 6, lineY(i) - 0.5, (nw / 2 - 12) * (i < 1 ? 0.7 : 0.3), 1);   // la hoja de ayer
+        c.globalAlpha = page; c.strokeStyle = hexA(P.tinta, 0.75); c.lineWidth = 0.9; c.lineJoin = 'round';
+        for (let i = 0; i <= li; i++) {                                   // la letra de hoy: renglones hechos y el que va escribiendo
+          const end = i < li ? 1 : u; if (end <= 0) continue;
+          c.beginPath(); for (let q = 0; q <= end + 1e-6; q += 0.02) { const xx = sx + x0 + q * (x1 - x0), yy = lineY(i) + Math.sin(q * 41 + i) * 0.9 - Math.abs(Math.sin(q * 13 + i * 2)) * 0.8; q ? c.lineTo(xx, yy) : c.moveTo(xx, yy); }
+          c.stroke();
+        }
+        c.globalAlpha = 1; c.restore();
+        let tx, ty;                                                       // la punta del lápiz: sobre el renglón, o levantada mientras vuelve al inicio
+        if (!lifting) { const ly = lineY(li); tx = sx + x0 + u * (x1 - x0) - sk * ly; ty = ly + Math.sin(u * 41 + li) * 0.9 - Math.abs(Math.sin(u * 13 + li * 2)) * 0.8; }
+        else { const nl = (li + 1) % n, q = cyc >= LINE * n ? Math.min(1, (cyc - LINE * n) / 600) : (lt - WR) / (LINE - WR), e = q * q * (3 - 2 * q);
+          const ax = sx + x1 - sk * lineY(li), bx2 = sx + x0 - sk * lineY(nl); tx = ax + (bx2 - ax) * e; ty = lineY(li) + (lineY(nl) - lineY(li)) * e - Math.sin(q * Math.PI) * 4; }
+        px = tx + 14.4 * k; py = ty - 29.7 * k;
+      } else { px = bx + 105 * k + (over.dx || 0); py = chY + 239 * k; }
+      const dx = (px - shX) / k, dy = (py - shY) / k, a = Math.atan2(-dx, dy), len = Math.hypot(dx, dy);
+      c.save(); c.translate(bx, chY); c.scale(k, k); c.lineJoin = 'round'; c.lineCap = 'round'; arm(c, 194, 214, a, over.prop, ms, len); c.restore();
       if (over.prop === 'rag' && !still) for (let i = 0; i < 3; i++) {    // el brillo que deja el trapo
         const q = ((ms / 900) + i / 3) % 1, sxx = cx + 105 * k + (i - 1) * 34 * k, r1 = 5 * Math.sin(q * Math.PI);
         c.fillStyle = hexA('#ffffff', 0.85 * Math.sin(q * Math.PI)); c.beginPath(); for (let j = 0; j < 8; j++) { const an = j * Math.PI / 4, rr2 = j % 2 ? r1 * 0.3 : r1; c.lineTo(sxx + Math.cos(an) * rr2, cy + 6 + Math.sin(an) * rr2); } c.closePath(); c.fill();
       }
-      hits.hand = hx2;
     }
     if (fly) {                                                            // la mosca de todos los días
       c.strokeStyle = hexA(P.tinta, 0.25); c.lineWidth = 1; c.setLineDash([2, 4]); c.beginPath();

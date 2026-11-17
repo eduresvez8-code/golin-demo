@@ -506,28 +506,12 @@ function drawTourDemo(cv, kind, ms) {
 }
 
 /* ---------------- entrada a la Tienda de Don Chucho ----------------
-   La reja metálica baja (clac), Don Chucho asoma detrás del mostrador y la reja sube
-   mientras las cartas aparecen una a una, como si él las mostrara.
-   · 1 s normalmente; 0,3 s después de la 5.ª visita (PROFILE.shopVisits) o con OPT.fast.
-   · En el primer picadito no se puede saltar; después, un clic la salta. */
+   La reja metálica baja de un golpe (clac y polvo) y, al subir, la tienda ya está ahí:
+   en el celular ocupa toda la pantalla. Sin escena de Don Chucho: dura menos de un segundo.
+   · 0,75 s normalmente; 0,35 s después de la 5.ª visita (PROFILE.shopVisits) o con OPT.fast.
+   · En el primer picadito no se puede saltar; después, un toque la salta. */
 const chuchoCache = {};
 function chuchoImg(w, h) { const k = w + 'x' + h; return chuchoCache[k] || (chuchoCache[k] = chuchoImage(w, h)); }
-/* Qué hace Don Chucho hoy. Primero los momentos especiales (easter eggs); si no hay, una escena al azar. */
-function chuchoScene() {
-  const v = PROFILE.shopVisits, h = new Date().getHours();
-  const bossWin = G.lastWin && G.match > 0 && EC.isBoss(G.match, CFG);
-  const base = { glasses: G.season > 1, party: bossWin };
-  if (v === 1) return Object.assign(base, { key:'saludo', line:'chucho.first' });
-  if (!G.lastWin) return Object.assign(base, { key:'empanada', line:'chucho.lost' });
-  if (bossWin) return Object.assign(base, { key:'fiesta', line:'chucho.boss' });
-  if (v % 10 === 0) return Object.assign(base, { key:'globos', line:'chucho.loyal', n: v });
-  if (h >= 21 || h < 6) return Object.assign(base, { key:'dormido', line:'chucho.sleep' });
-  if (G.season > 1 && !PROFILE.eggsSeen.endless) return Object.assign(base, { key:'radio', egg:'endless', line:'chucho.endless' });
-  const pool = ['monedas', 'tinto', 'periodico', 'radio', 'escoba'];
-  const key = pool[(v * 7 + G.match) % pool.length];
-  const line = G.plata >= 20 ? 'chucho.rich' : G.plata < 4 ? 'chucho.poor' : 'chucho.' + key;
-  return Object.assign(base, { key, line });
-}
 /* Detalles del barrio que van apareciendo con el tiempo */
 function chuchoEggs() {
   return {
@@ -541,14 +525,13 @@ function chuchoEggs() {
 function playShopIntro(done) {
   PROFILE.shopVisits = (PROFILE.shopVisits || 0) + 1;
   PROFILE.eggsSeen = PROFILE.eggsSeen || {};
-  const scene = chuchoScene(), eggs = chuchoEggs();
-  // ¿algo que el jugador nunca ha visto? Entonces se ve completo aunque ya sea cliente de la casa
-  const eggKeys = ['scene:' + scene.key].concat(Object.keys(eggs).filter(k => eggs[k]).map(k => 'egg:' + k), scene.egg ? ['egg:' + scene.egg] : []);
-  const fresh = eggKeys.filter(k => !PROFILE.eggsSeen[k]);
+  const eggs = chuchoEggs();
+  // ¿un detalle de la reja que nunca has visto (grafiti, rayitas, corona)? Entonces la reja se queda abajo un rato más
+  const fresh = Object.keys(eggs).filter(k => eggs[k]).map(k => 'egg:' + k).filter(k => !PROFILE.eggsSeen[k]);
   fresh.forEach(k => { PROFILE.eggsSeen[k] = true; });
   saveProfile();
   const short = (OPT.fast || PROFILE.shopVisits > 5) && !fresh.length;
-  const T = short ? 300 : 1200;
+  const T = short ? 350 : fresh.length ? 1100 : 750, DOWN = short ? 0.42 : 0.36, UP = short ? 0.58 : fresh.length ? 0.74 : 0.6;
   const canSkip = (PROFILE.runs || 0) > 0;
   const el = document.createElement('div'); el.id = 'shutter';
   const cv = document.createElement('canvas'); el.appendChild(cv); document.body.appendChild(el);
@@ -556,39 +539,38 @@ function playShopIntro(done) {
   cv.width = W * dpr; cv.height = H * dpr; cv.style.width = W + 'px'; cv.style.height = H + 'px';
   const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0);
   const side = $('side');
-  side.style.setProperty('--T', T + 'ms');
+  side.style.setProperty('--T', Math.round((UP - DOWN) * T) + 'ms');               // las cartas entran justo cuando la reja empieza a subir
   side.querySelectorAll(':scope > *, .card, .item').forEach((x, i) => x.style.setProperty('--i', i));
-  side.classList.add('reveal');
   G.paused = true;
-  SFX.reja(T * (short ? 0.4 : 0.3) / 1000);
+  SFX.reja(T * DOWN / 1000);
   const dust = [], t0 = performance.now();
-  let over = false, landed = false, coinSound = false;
-  const ease = x => 1 - Math.pow(1 - x, 3), clamp01 = x => Math.max(0, Math.min(1, x));
+  let over = false, landed = false;
+  const ease = x => 1 - Math.pow(1 - x, 3), easeIn = x => x * x * x;
   function frame() {
     if (over) return;
     const now = performance.now(), p = (now - t0) / T;
-    // posición del borde inferior de la reja (0 = arriba, H = abajo)
-    let edge;
-    if (short) edge = p < 0.45 ? H * ease(p / 0.45) : p < 0.55 ? H : H * (1 - ease((p - 0.55) / 0.45));
-    else edge = p < 0.3 ? H * ease(p / 0.3) : p < 0.8 ? H : H * (1 - ease((p - 0.8) / 0.2));
-    if (!landed && edge >= H - 1) {                          // golpe contra el piso: polvo
+    // borde inferior de la reja (0 = arriba, H = abajo): cae con gravedad, rebota apenas y sube rápido
+    const edge = p < DOWN ? H * easeIn(p / DOWN) : p < UP ? H - Math.abs(Math.sin((p - DOWN) / (UP - DOWN) * Math.PI * 2)) * 10 * (1 - (p - DOWN) / (UP - DOWN)) : H * (1 - ease((p - UP) / (1 - UP)));
+    if (!landed && p >= DOWN) {                              // golpe contra el piso: polvo, y detrás ya está armada la tienda
       landed = true;
       const n = OPT.reduceFlashes ? 8 : 26;
       for (let i = 0; i < n; i++) dust.push({ x: Math.random() * W, y: H - 4, vx: (Math.random() - 0.5) * 160, vy: -40 - Math.random() * 90, t: now });
+      if (isCompact()) openSheet(true);
+      side.classList.add('reveal');
     }
     c.clearRect(0, 0, W, H);
-    drawShutter(c, W, H, edge, now, eggs, landed ? (now - t0) : 0);
-    if (!short) drawCounterScene(c, W, H, clamp01((p - 0.3) / 0.14), clamp01((p - 0.84) / 0.16), scene, eggs, now - t0);
+    drawShutter(c, W, H, Math.min(H, edge), now, eggs, landed ? (now - t0) : 0);
     for (const d of dust) {
       const a = (now - d.t) / 700; if (a > 1) continue;
       c.globalAlpha = 1 - a; c.fillStyle = '#D9C7A5';
       circle(c, d.x + d.vx * a, d.y + d.vy * a + 60 * a * a, 3 + 5 * a); c.fill(); c.globalAlpha = 1;
     }
-    if (!coinSound && !short && scene.key === 'monedas' && p > 0.45) { coinSound = true; SFX.caja(2); }
     if (p < 1) requestAnimationFrame(frame); else finish();
   }
   const finish = () => {
     if (over) return; over = true;
+    if (isCompact() && G.state === 'shop') openSheet(true);
+    side.classList.add('reveal');
     el.remove(); G.paused = false;
     setTimeout(() => side.classList.remove('reveal'), 900);
     if (done) done();
@@ -645,98 +627,6 @@ function drawShutter(c, W, H, edge, now, eggs, sinceLand, opts = {}) {
   c.save(); c.translate(W / 2, box / 2 - 3); c.rotate(-0.01);
   plateText(c, t('shop.title'), 0, 0, 18, PAL.crema);
   c.restore();
-}
-/* El mostrador sube, Don Chucho aparece haciendo lo suyo y dice su frase. inP/outP: 0..1 de entrada/salida */
-function drawCounterScene(c, W, H, inP, outP, scene, eggs, ms) {
-  if (inP <= 0) return;
-  const counterH = Math.min(150, H * 0.2), rise = (1 - (1 - inP) * (1 - inP)) * (1 - outP);
-  const cy = H - counterH * rise;
-  // Don Chucho detrás del mostrador
-  const narrow = W < 600;                                             // celular vertical
-  const cw = Math.min(300, W * (narrow ? 0.44 : 0.26)), ch = cw * 280 / 240, cx = W * (scene.xFrac || (narrow ? 0.55 : 0.72)) - cw / 2;
-  const pop = Math.min(1, inP * 1.4), over = pop < 1 ? 0 : Math.sin(Math.min(1, (ms - 500) / 250) * Math.PI) * 6;
-  const chY = cy - ch * 0.84 * pop + over + (1 - rise) * ch;          // hombros justo sobre el mostrador
-  // globos detrás (cada 10 visitas)
-  if (scene.key === 'globos') for (let i = 0; i < 3; i++) {
-    const bx = cx + cw * (0.1 + i * 0.4), by = chY - 30 - i * 18 + Math.sin(ms / 300 + i) * 6;
-    c.beginPath(); c.moveTo(bx, by + 34); c.lineTo(bx + 6, by + 120); c.lineWidth = 2; c.strokeStyle = PAL.tinta; c.stroke();
-    c.beginPath(); c.ellipse(bx, by, 26, 32, 0, 0, Math.PI * 2); inkFill(c, [PAL.crema, PAL.madera, PAL.cancha][i], 4);
-  }
-  const pose = { eyes: 'wink', party: scene.party, glasses: scene.glasses, bob: Math.sin(ms / 160) * 2 };
-  const tt = ms;
-  switch (scene.key) {
-    case 'saludo': pose.arm = { a: -2.4 + Math.sin(ms / 110) * 0.35, prop: 'wave' }; pose.eyes = 'open'; break;
-    case 'monedas': pose.arm = { a: -1.75, prop: 'coin', t: tt }; break;
-    case 'tinto': pose.arm = { a: 2.25 + Math.sin(ms / 400) * 0.08, prop: 'cup', t: tt }; pose.eyes = ms < 700 ? 'closed' : 'wink'; break;
-    case 'periodico': pose.paper = Math.min(1, ms / 900); pose.headline = scene.headline || headline(); break;
-    case 'radio': pose.arm = { a: 0.2 }; pose.bob = Math.sin(ms / 110) * 5; pose.eyes = 'closed'; break;
-    case 'escoba': pose.arm = { a: -2.0 + Math.sin(ms / 140) * 0.22, prop: 'broom' }; break;
-    case 'dormido': pose.eyes = ms < 750 ? 'closed' : 'wide'; pose.bob = ms < 750 ? Math.sin(ms / 400) * 3 : -10; pose.arm = { a: 0.2 }; break;
-    case 'empanada': pose.arm = { a: -1.85, prop: 'empanada' }; pose.eyes = 'open'; break;
-    case 'fiesta': pose.arm = { a: -2.5 + Math.sin(ms / 90) * 0.3, prop: 'wave' }; pose.eyes = 'open'; break;
-    case 'globos': pose.arm = { a: -2.3, prop: 'wave' }; break;
-    default: pose.arm = { a: 0.25 };
-  }
-  c.save(); c.translate(cx, chY); drawChucho(c, cw, ch, pose); c.restore();
-  // "Zzz" o notas musicales flotando
-  if (scene.key === 'dormido' && ms < 750) { c.fillStyle = PAL.crema; c.font = `28px ${FONT_NUM}`; for (let i = 0; i < 3; i++) c.fillText('z', cx + cw * 0.8 + i * 18, chY + 30 - i * 22 - (ms / 40) % 20); }
-  if (scene.key === 'radio') { c.fillStyle = PAL.crema; c.font = `30px system-ui`; for (let i = 0; i < 3; i++) { const k = ((ms / 900) + i / 3) % 1; c.globalAlpha = 1 - k; c.fillText('♪', cx - 30 + i * 28, cy - 40 - k * 90); } c.globalAlpha = 1; }
-  if (scene.key === 'fiesta') for (let i = 0; i < 24; i++) {
-    const k = ((ms / 1400) + i / 24) % 1; c.fillStyle = [PAL.crema, PAL.madera, '#E9A15B', PAL.cancha][i % 4];
-    c.fillRect(cx - 80 + (i * 53) % (cw + 160), chY - 40 + k * (H - chY), 7, 11);
-  }
-  // mostrador de madera
-  c.fillStyle = PAL.maderaOsc; c.fillRect(0, cy, W, H - cy);
-  c.fillStyle = PAL.madera; c.fillRect(0, cy + 12, W, H - cy);
-  c.fillStyle = 'rgba(122,68,32,0.5)'; for (let y = cy + 30; y < H; y += 24) c.fillRect(0, y, W, 2);
-  c.fillStyle = PAL.tinta; c.fillRect(0, cy, W, 6);
-  // objetos sobre el mostrador: tarro de la plata, radio, letrero FIADO NO, El Gato
-  const jarX = narrow ? 16 : W * 0.52, radioX = narrow ? 12 : W * 0.42;
-  if (!(narrow && scene.key === 'radio')) {           // en el celular la radio ocupa el puesto del tarro
-    pathRoundRect(c, jarX, cy - 46, 44, 46, 6); inkFill(c, PAL.plata, 4);
-    c.fillStyle = PAL.tinta; c.font = `16px ${FONT_NUM}`; c.textAlign = 'center'; c.fillText('$', jarX + 22, cy - 18);
-  }
-  if (scene.key === 'radio') { pathRoundRect(c, radioX, cy - 52, 80, 52, 8); inkFill(c, PAL.maderaOsc, 4); circle(c, radioX + 24, cy - 26, 14); inkFill(c, PAL.crema, 3); for (let i = 0; i < 3; i++) { c.fillStyle = PAL.tinta; c.fillRect(radioX + 46, cy - 40 + i * 9, 26, 4); } }
-  if (eggs.fiado) {
-    c.save(); c.translate(Math.max(62, W * 0.12), cy - (narrow ? 80 : 64)); c.rotate(-0.06 + Math.sin(ms / 500) * 0.03);   // a la izquierda: no tapa sus manos
-    c.beginPath(); c.moveTo(-30, -26); c.lineTo(0, -48); c.lineTo(30, -26); c.lineWidth = 2; c.strokeStyle = PAL.tinta; c.stroke();
-    pathRoundRect(c, -52, -26, 104, 44, 5); inkFill(c, PAL.crema, 4);
-    c.fillStyle = PAL.tinta; c.font = `18px ${FONT_HAND}`; c.textAlign = 'center'; c.fillText(t('chucho.fiado'), 0, 4); c.restore();
-  }
-  if (eggs.gato) {
-    const gx = narrow ? 100 : W * 0.58, gy = cy;
-    c.save(); c.translate(gx, gy);
-    c.beginPath(); c.ellipse(0, -18, 30, 20, 0, 0, Math.PI * 2); inkFill(c, PAL.tinta, 3);             // cuerpo dormido
-    circle(c, 24, -28, 14); inkFill(c, PAL.tinta, 3);                                                // cabeza
-    for (const ex of [16, 32]) { c.beginPath(); c.moveTo(ex - 6, -38); c.lineTo(ex, -50); c.lineTo(ex + 5, -38); c.closePath(); inkFill(c, PAL.tinta, 2); }
-    c.beginPath(); c.moveTo(-28, -12); c.quadraticCurveTo(-50, -6 + Math.sin(ms / 250) * 6, -40, -30); c.lineWidth = 6; c.strokeStyle = PAL.tinta; c.stroke();
-    c.restore();
-  }
-  // globo de diálogo
-  if (inP >= 1 && outP <= 0 && scene.line && narrow) {          // celular: globo encima de Don Chucho, en varias líneas
-    const text = t(scene.line, { n: scene.n || PROFILE.shopVisits });
-    c.font = `600 16px ${FONT_TXT}`;
-    const maxW = W - 24 - 28, lines = [];
-    for (const word of text.split(' ')) {
-      const cur = lines.length ? lines[lines.length - 1] : null;
-      if (cur !== null && c.measureText(cur + ' ' + word).width <= maxW) lines[lines.length - 1] = cur + ' ' + word; else lines.push(word);
-    }
-    const lw = Math.max(...lines.map(l => c.measureText(l).width)), tw = Math.min(W - 24, lw + 28), bh = lines.length * 20 + 20;
-    const tipX = cx + cw * 0.45, bx = clamp(tipX - tw / 2, 12, W - 12 - tw), by = Math.max(64, chY - bh - 24);
-    pathRoundRect(c, bx, by, tw, bh, 14); inkFill(c, PAL.crema, 4);
-    c.beginPath(); c.moveTo(tipX - 12, by + bh - 4); c.lineTo(tipX, by + bh + 16); c.lineTo(tipX + 12, by + bh - 4); c.closePath(); c.fillStyle = PAL.crema; c.fill();
-    c.beginPath(); c.moveTo(tipX - 12, by + bh - 1); c.lineTo(tipX, by + bh + 16); c.lineTo(tipX + 12, by + bh - 1); c.lineWidth = 4; c.strokeStyle = PAL.tinta; c.stroke();
-    c.fillStyle = PAL.tinta; c.textAlign = 'center'; c.textBaseline = 'middle';
-    lines.forEach((l, i) => c.fillText(l, bx + tw / 2, by + 20 + i * 20));
-  } else if (inP >= 1 && outP <= 0 && scene.line) {
-    const text = t(scene.line, { n: scene.n || PROFILE.shopVisits });
-    c.font = `600 17px ${FONT_TXT}`;
-    const tw = Math.min(360, c.measureText(text).width + 32), bx = Math.max(12, cx - tw - 10), by = chY + 20;
-    pathRoundRect(c, bx, by, tw, 50, 14); inkFill(c, PAL.crema, 4);
-    c.beginPath(); c.moveTo(bx + tw - 6, by + 18); c.lineTo(bx + tw + 22, by + 30); c.lineTo(bx + tw - 6, by + 36); c.closePath(); c.fillStyle = PAL.crema; c.fill();
-    c.beginPath(); c.moveTo(bx + tw - 2, by + 18); c.lineTo(bx + tw + 22, by + 30); c.lineTo(bx + tw - 2, by + 36); c.lineWidth = 4; c.strokeStyle = PAL.tinta; c.stroke();
-    c.fillStyle = PAL.tinta; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText(text, bx + 16, by + 26, tw - 28);
-  }
 }
 /* Titular del periódico del barrio: habla de lo que te está pasando */
 function headline() {
@@ -812,7 +702,12 @@ function nextMatchInfo() {
   return t('shop.nextInfo', { m, q: fmt(meta), f: fmt(Math.max(0, meta - start)), s: shotsPerMatch() });
 }
 /* ---------------- celular: hoja que sube desde abajo y barra de abajo ---------------- */
-function openSheet() { if (!isCompact()) return; document.body.classList.add('sheet-open'); hideTooltip(); }
+function openSheet(instant) {                              // instant: detrás de la reja, sin deslizarse
+  if (!isCompact()) return;
+  const b = document.body;
+  if (instant && !b.classList.contains('sheet-open')) { b.classList.add('sheet-now'); requestAnimationFrame(() => requestAnimationFrame(() => b.classList.remove('sheet-now'))); }
+  b.classList.add('sheet-open'); hideTooltip();
+}
 function closeSheet() { document.body.classList.remove('sheet-open'); }
 function toggleSheet() { if (document.body.classList.contains('sheet-open')) closeSheet(); else openSheet(); }
 $('sheetBack').addEventListener('click', closeSheet);
